@@ -8,7 +8,7 @@ from oil.tuning.study import Study, train_trial
 from oil.tuning.configGenerator import uniform,logUniform
 
 
-log_dir_base = os.path.expanduser('~/tb-experiments/ode_resnets2')
+log_dir_base = os.path.expanduser('~/tb-experiments/ode_resnets_test')
 cfgs = ({
     'dataset': CIFAR10,
     'network': net,
@@ -17,8 +17,8 @@ cfgs = ({
     'num_epochs':100, 
     'trainer_config':{'log_dir':lambda cfg:log_dir_base+\
         '/{}/{}'.format(cfg['dataset'],cfg['network'])}
-    } for net in [BezierRNNSplit,BezierODE,BezierRNN])
-#ODEResnet,RNNResnet,,SplitODEResnet,SmallResnet,
+    } for net in [SmallResnet])
+#ODEResnet,RNNResnet,,SplitODEResnet,SmallResnet,BezierRNNSplit,BezierODE,BezierRNN
 do_trial = simpleClassifierTrial(strict=True)
 ode_study = Study(do_trial, slurm_cfg={'time':'4:00:00'})
 for cfg in cfgs:

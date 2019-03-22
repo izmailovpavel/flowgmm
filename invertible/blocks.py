@@ -81,46 +81,6 @@ class ConcatBottleBlock(nn.Module):
         if self.add: out = out+x
         return out
 
-class tFiLM(nn.Module):
-    def __init__(self,channels):
-        super().__init__()
-        self.channels=channels
-        self.gamma_betas = nn.Sequential(
-            nn.Linear(1,2*channels),
-            nn.ReLU(),
-            nn.Linear(2*channels,2*channels))
-    def forward(self,t,x):
-        t_mb = t*torch.ones((x.shape[0],1)).type_as(x) # expand to B x 1
-        gb = self.gamma_betas(t_mb)
-        return contrib.film(x,gb[:,:self.channels],gb[:,self.channels:])
-
-class FiLMResBlock(nn.Module):
-    def __init__(self, channels,gn=True,add=False):
-        super().__init__()
-        norm_layer = (lambda c: nn.GroupNorm(c//16,c)) if gn else nn.BatchNorm2d
-        self.norm1 = norm_layer(channels)
-        self.film1 = tFiLM(channels)
-        self.relu = nn.ReLU(inplace=True)
-        self.conv1 = conv2d(channels,channels)
-        self.norm2 = norm_layer(channels)
-        self.film2 = tFiLM(channels)
-        self.conv2 = conv2d(channels,channels)
-        self.add = add
-        self.nfe = 0
-
-    def forward(self, t, x):
-        self.nfe += 1
-        out = self.norm1(x)
-        out = self.film1(t,out)
-        out = self.relu(out)
-        out = self.conv1(out)
-        out = self.norm2(out)
-        out = self.film2(t,out)
-        out = self.relu(out)
-        out = self.conv2(out)
-        if self.add: out = out+x
-        return out
-
 @export
 class ODEBlock(nn.Module):
 

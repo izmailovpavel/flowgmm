@@ -6,10 +6,9 @@ import torch.nn as nn
 import numpy as np
 from torch.nn.utils import weight_norm
 from oil.utils.utils import Expression,export,Named
-from oil.architectures.parts import ResBlock,ConcatResBlock,ODEBlock,conv2d, RNNBlock,FiLMResBlock
-from oil.architectures.parts import ConcatBottleBlock
-
-
+from oil.architectures.parts import conv2d,ResBlock
+from blocks import ConcatResBlock,ODEBlock,RNNBlock
+from blocks import ConcatBottleBlock,BezierResBlock
 
 def BNrelu(channels,gn=False):
     norm_layer = nn.GroupNorm(channels//16,channels) if gn else nn.BatchNorm2d(channels)
@@ -71,7 +70,30 @@ class ODEResnet(nn.Module,metaclass=Named):
         for name, m in self.net.named_children():
             if isinstance(m, ODEBlock):
                 logger.add_scalars('info',{'nfe{}'.format(name):m.nfe},step)
-                
+
+@export
+class BezierODE(nn.Module,metaclass=Named):
+    def __init__(self,num_classes=10,k=64,gn=False,block_size=12):
+        super().__init__()
+        self.num_classes = num_classes
+        self.net = nn.Sequential(
+            conv2d(3,k),
+            ResBlock(k,2*k,gn=gn,stride=2),
+            ResBlock(2*k,4*k,gn=gn,stride=2),
+            ODEBlock(BezierResBlock(4*k,gn=gn,add=True,bends=block_size),tol=1e-1),
+            BNrelu(4*k,gn=gn),
+            Expression(lambda u:u.mean(-1).mean(-1)),
+            nn.Linear(4*k,num_classes)
+        )
+    def forward(self,x):
+        return self.net(x)
+
+    def log_data(self,logger,step):
+        for name, m in self.net.named_children():
+            if isinstance(m, ODEBlock):
+                logger.add_scalars('info',{'nfe{}'.format(name):m.nfe},step)
+
+
 @export
 class SplitODEResnet(nn.Module,metaclass=Named):
     def __init__(self,num_classes=10,k=64,gn=False,block_size=4):
@@ -130,7 +152,7 @@ class RNNBottle(nn.Module,metaclass=Named):
     def forward(self,x):
         return self.net(x)
 @export
-class FiLMRNNResnet(nn.Module,metaclass=Named):
+class BezierRNN(nn.Module,metaclass=Named):
     def __init__(self,num_classes=10,k=64,gn=False,block_size=12):
         super().__init__()
         self.num_classes = num_classes
@@ -138,31 +160,28 @@ class FiLMRNNResnet(nn.Module,metaclass=Named):
             conv2d(3,k),
             ResBlock(k,2*k,gn=gn,stride=2),
             ResBlock(2*k,4*k,gn=gn,stride=2),
-            RNNBlock(FiLMResBlock(4*k,gn=gn,add=True),L=12),
+            RNNBlock(BezierResBlock(4*k,gn=gn,add=True,bends=block_size//2),L=block_size),
             BNrelu(4*k,gn=gn),
             Expression(lambda u:u.mean(-1).mean(-1)),
             nn.Linear(4*k,num_classes)
         )
     def forward(self,x):
         return self.net(x)
-
 @export
-class FiLMODEResnet(nn.Module,metaclass=Named):
-    def __init__(self,num_classes=10,k=64,gn=False):
+class BezierRNNSplit(nn.Module,metaclass=Named):
+    def __init__(self,num_classes=10,k=64,gn=False,block_size=4):
         super().__init__()
         self.num_classes = num_classes
         self.net = nn.Sequential(
             conv2d(3,k),
+            RNNBlock(BezierResBlock(k,gn=gn,add=True,bends=block_size),L=block_size*2),
             ResBlock(k,2*k,gn=gn,stride=2),
+            RNNBlock(BezierResBlock(2*k,gn=gn,add=True,bends=block_size),L=block_size*2),
             ResBlock(2*k,4*k,gn=gn,stride=2),
-            ODEBlock(FiLMResBlock(4*k,gn=gn)),
+            RNNBlock(BezierResBlock(4*k,gn=gn,add=True,bends=block_size),L=block_size*2),
             BNrelu(4*k,gn=gn),
             Expression(lambda u:u.mean(-1).mean(-1)),
             nn.Linear(4*k,num_classes)
         )
     def forward(self,x):
         return self.net(x)
-    def log_data(self,logger,step):
-        for name, m in self.net.named_children():
-            if isinstance(m, ODEBlock):
-                logger.add_scalars('info',{'nfe{}'.format(name):m.nfe},step)
