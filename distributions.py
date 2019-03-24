@@ -27,6 +27,6 @@ class SSLGaussMixture(torch.distributions.Distribution):
         log_probs = torch.log(probs)
         for i in range(self.n_components):
             mask = (y == i)
-            log_probs[mask] = all_probs[i][mask] * label_weight
+            log_probs[mask] = torch.log(all_probs[i][mask]) * label_weight
         return log_probs
 
