@@ -1,15 +1,21 @@
 import torch
-from torch import distributions
+from torch import distributions, nn
+import torch.nn.functional as F
 import numpy as np
 
 class SSLGaussMixture(torch.distributions.Distribution):
 
-    def __init__(self,  means, cov_std=1., device=None):
+    def __init__(self, means, cov_std=torch.tensor([1.]), device=None):
         self.n_components, self.d = means.shape
+        self.means = means.to(device)
+        self.cov_std = cov_std
+
         cov = cov_std**2 * torch.eye(self.d).to(device)
-        means = means.to(device)
         self.gaussians = [distributions.MultivariateNormal(mean, cov)
-                          for mean in means]
+                          for mean in self.means]
+
+    def parameters(self):
+       return [self.means, self.cov_std]
         
     def sample(self, sample_shape):
         n_samples = sample_shape[0]
@@ -21,7 +27,7 @@ class SSLGaussMixture(torch.distributions.Distribution):
             samples[mask] = all_samples[i][mask]
         return samples
         
-    def log_prob(self, x, y=None, label_weight=1.):
+    def log_prob(self, x, y, label_weight=1.):
         all_probs = [torch.exp(g.log_prob(x)) for g in self.gaussians]
         probs = sum(all_probs) / self.n_components
         log_probs = torch.log(probs)
@@ -30,3 +36,26 @@ class SSLGaussMixture(torch.distributions.Distribution):
             log_probs[mask] = torch.log(all_probs[i][mask]) * label_weight
         return log_probs
 
+class SSLGaussMixtureClassifier(SSLGaussMixture):
+    
+    def __init__(self, means, cov_std=1., device=None):
+        super().__init__(means, cov_std, device)
+        self.classifier = nn.Sequential(nn.Linear(self.d, self.n_components))
+
+    def parameters(self):
+       return self.classifier.parameters() 
+
+    def forward(self, x):
+        return self.classifier.forward(x)
+
+    def log_prob(self, x, y, label_weight=1.):
+        all_probs = [torch.exp(g.log_prob(x)) for g in self.gaussians]
+        probs = sum(all_probs) / self.n_components
+        x_logprobs = torch.log(probs)
+
+        mask = (y != -1)
+        labeled_x, labeled_y = x[mask], y[mask].long()
+        preds = self.forward(labeled_x)
+        y_logprobs = F.cross_entropy(preds, labeled_y)
+
+        return x_logprobs - y_logprobs
