@@ -57,3 +57,9 @@ def make_github_cat(img_path):
     X[:, 1] *=  -1.
     return X.astype(np.float32), np.ones(1000) * (-1)
 
+def make_npz(npz_path):
+    f = np.load(npz_path)
+    data = f["data"].astype(np.float32)
+    labels = f["labels"].astype(np.int)
+    return data, labels
+ 
