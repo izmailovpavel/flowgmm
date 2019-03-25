@@ -4,6 +4,7 @@ from oil.model_trainers.classifier import Classifier,simpleClassifierTrial
 from resnets import SplitODEResnet,ODEResnet,LongResnet,RNNBottle
 from resnets import SmallResnet,RNNResnet
 from resnets import BezierRNN,BezierODE,BezierRNNSplit
+from iresnet import aResnet, squeezeResnet, iResnet
 from oil.tuning.study import Study, train_trial
 from oil.tuning.configGenerator import uniform,logUniform
 
@@ -12,12 +13,12 @@ log_dir_base = os.path.expanduser('~/tb-experiments/ode_resnets_test')
 cfgs = ({
     'dataset': CIFAR10,
     'network': net,
-    'net_config': {'gn':True},
+    'net_config': {'gn':False},
     'loader_config': {'amnt_dev':5000,'lab_BS':50},
     'num_epochs':100, 
     'trainer_config':{'log_dir':lambda cfg:log_dir_base+\
         '/{}/{}'.format(cfg['dataset'],cfg['network'])}
-    } for net in [SmallResnet])
+    } for net in [iResnet])
 #ODEResnet,RNNResnet,,SplitODEResnet,SmallResnet,BezierRNNSplit,BezierODE,BezierRNN
 do_trial = simpleClassifierTrial(strict=True)
 ode_study = Study(do_trial, slurm_cfg={'time':'4:00:00'})
