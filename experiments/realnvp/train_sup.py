@@ -16,8 +16,13 @@ from flow_ssl.realnvp import RealNVP, RealNVPLoss
 from tqdm import tqdm
 from flow_ssl.distributions import SSLGaussMixture
 
+from tensorboardX import SummaryWriter
+
 
 def main(args):
+
+    writer = SummaryWriter(log_dir=args.logdir)
+
     device = 'cuda' if torch.cuda.is_available() and len(args.gpu_ids) > 0 else 'cpu'
     start_epoch = 0
 
@@ -56,10 +61,14 @@ def main(args):
         start_epoch = checkpoint['epoch']
 
     D = (32 * 32 * 3)
-    r = 10. #PAVEL: we might need to use distance similar to sqrt(D)
+    r = 1. #PAVEL: we might need to use distance similar to sqrt(D)
     means = torch.zeros((10, D)).to(device)
+    mean_portion = 1 #D // 10
     for i in range(10):
-        means[i, i] = r
+        means[i, i*mean_portion:(i+1)*mean_portion] = r
+    #PAVEL: think about mean choices
+    
+    print(means)
 
     prior = SSLGaussMixture(means, device=device)
     loss_fn = RealNVPLoss(prior)
@@ -69,11 +78,11 @@ def main(args):
     optimizer = optim.Adam(param_groups, lr=args.lr)
 
     for epoch in range(start_epoch, start_epoch + args.num_epochs):
-        train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm)
-        test(epoch, net, testloader, device, loss_fn, args.num_samples)
+        train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm, writer)
+        test(epoch, net, testloader, device, loss_fn, args.num_samples, writer)
 
 
-def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm):
+def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, writer):
     print('\nEpoch: %d' % epoch)
     net.train()
     loss_meter = utils.AverageMeter()
@@ -102,6 +111,9 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm):
                                      bpd=utils.bits_per_dim(x, loss_meter.avg),
                                      acc=acc_meter.avg)
             progress_bar.update(x.size(0))
+    writer.add_scalar("train/loss", loss_meter.avg, epoch)
+    writer.add_scalar("train/acc", acc_meter.avg, epoch)
+    writer.add_scalar("train/bpd", utils.bits_per_dim(x, loss_meter.avg), epoch)
 
 
 def sample(net, prior, batch_size, cls, device):
@@ -113,15 +125,16 @@ def sample(net, prior, batch_size, cls, device):
         device (torch.device): Device to use.
     """
     #z = torch.randn((batch_size, 3, 32, 32), dtype=torch.float32, device=device)
-    z = prior.sample((batch_size,), gaussian_id=cls)
-    z = z.reshape((batch_size, 3, 32, 32))
-    x, _ = net(z, reverse=True)
-    x = torch.sigmoid(x)
+    with torch.no_grad():
+        z = prior.sample((batch_size,), gaussian_id=cls)
+        z = z.reshape((batch_size, 3, 32, 32))
+        x, _ = net(z, reverse=True)
+        x = torch.sigmoid(x)
 
-    return x
+        return x
 
 
-def test(epoch, net, testloader, device, loss_fn, num_samples):
+def test(epoch, net, testloader, device, loss_fn, num_samples, writer):
     global best_loss
     net.eval()
     loss_meter = utils.AverageMeter()
@@ -145,6 +158,10 @@ def test(epoch, net, testloader, device, loss_fn, num_samples):
                                      acc=acc_meter.avg)
                 progress_bar.update(x.size(0))
 
+    writer.add_scalar("test/loss", loss_meter.avg, epoch)
+    writer.add_scalar("test/acc", acc_meter.avg, epoch)
+    writer.add_scalar("test/bpd", utils.bits_per_dim(x, loss_meter.avg), epoch)
+
     # Save checkpoint
     if loss_meter.avg < best_loss:
         print('Saving...')
@@ -163,6 +180,7 @@ def test(epoch, net, testloader, device, loss_fn, num_samples):
     for i in range(10):
         images_cls = sample(net, loss_fn.prior, num_samples // 10, cls=i, device=device)
         images.append(images_cls)
+        writer.add_image("Samples "+str(i), images_cls)
     images = torch.cat(images)
     os.makedirs('samples', exist_ok=True)
     images_concat = torchvision.utils.make_grid(images, nrow=num_samples //  10 , padding=2, pad_value=255)
@@ -174,6 +192,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--data_path', type=str, default=None, required=True, metavar='PATH',
                     help='path to datasets location (default: None)')
+    parser.add_argument('--logdir', type=str, default=None, required=True, metavar='PATH',
+                    help='path to log directory (default: None)')
     parser.add_argument('--batch_size', default=64, type=int, help='Batch size')
     #parser.add_argument('--benchmark', action='store_true', help='Turn on CUDNN benchmarking')
     parser.add_argument('--gpu_ids', default='[0]', type=eval, help='IDs of GPUs to use')
