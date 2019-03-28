@@ -56,7 +56,7 @@ def main(args):
         start_epoch = checkpoint['epoch']
 
     D = (32 * 32 * 3)
-    r = 2.5 #PAVEL: we might need to use distance similar to sqrt(D)
+    r = 10. #PAVEL: we might need to use distance similar to sqrt(D)
     means = torch.zeros((10, D)).to(device)
     for i in range(10):
         means[i, i] = r
@@ -85,7 +85,7 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm):
             optimizer.zero_grad()
             z, sldj = net(x, reverse=False)
             #loss = loss_fn(z, y=y, sldj=sldj)
-            loss = loss_fn(z, sldj=sldj)
+            loss = loss_fn(z, y=y, sldj=sldj)
             #print(loss)
             loss_meter.update(loss.item(), x.size(0))
 
@@ -131,8 +131,8 @@ def test(epoch, net, testloader, device, loss_fn, num_samples):
             for x, y in testloader:
                 x = x.to(device)
                 y = y.to(device)
-                z, sldj = net(x, y, reverse=False)
-                loss = loss_fn(z, sldj)
+                z, sldj = net(x, reverse=False)
+                loss = loss_fn(z, y=y, sldj=sldj)
                 loss_meter.update(loss.item(), x.size(0))
 
                 preds = loss_fn.prior.classify(z.reshape((len(z), -1)))
