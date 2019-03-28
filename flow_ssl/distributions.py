@@ -10,14 +10,16 @@ class SSLGaussMixture(torch.distributions.Distribution):
         self.means = means.to(device)
         self.cov_stds = cov_stds
         if self.cov_stds is None:
-            self.cov_stds = torch.ones((len(means)))
+            self.cov_stds = torch.ones((len(means))).to(device)
         self.device = device
 
     @property
     def gaussians(self):
         eye = torch.eye(self.d).to(self.device)
-        self.gaussians = [distributions.MultivariateNormal(mean, cov_std * eye)
+        gaussians = [distributions.MultivariateNormal(mean, cov_std * eye)
                           for mean, cov_std in zip(self.means, self.cov_stds)]
+        return gaussians
+
 
     def parameters(self):
        return [self.means, self.cov_std]
@@ -45,6 +47,10 @@ class SSLGaussMixture(torch.distributions.Distribution):
                 mask = (y == i)
                 log_probs[mask] = torch.log(all_probs[i][mask]) * label_weight
         return log_probs
+
+    def classify(self, x):
+        log_probs = torch.cat([g.log_prob(x)[:, None] for g in self.gaussians], dim=1)
+        return torch.argmax(log_probs, dim=1)
 
 
 #PAVEL: remove later

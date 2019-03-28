@@ -4,6 +4,7 @@ import torch
 from torch import nn
 from torch import distributions
 
+#PAVEL: combine this with the CIFAR RealNVP code
 
 class RealNVP(nn.Module):
     def __init__(self, nets, nett, masks, prior, device=None):
