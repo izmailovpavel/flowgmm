@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from resnet_util import WNConv2d
+from flow_ssl.resnet.resnet_util import WNConv2d
 
 #PAVEL: why do they use weight norm?
 #PAVEL: replace with Marc's resnet code?

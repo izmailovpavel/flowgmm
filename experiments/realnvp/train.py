@@ -1,6 +1,6 @@
-"""Train Real NVP on CIFAR-10.
-
-Train script adapted from: https://github.com/kuangliu/pytorch-cifar/
+"""
+Code adapted from https://github.com/chrischute/real-nvp, which is in turn
+adapted from: https://github.com/kuangliu/pytorch-cifar/
 """
 import argparse
 import os
@@ -10,10 +10,11 @@ import torch.backends.cudnn as cudnn
 import torch.utils.data as data
 import torchvision
 import torchvision.transforms as transforms
-import util
+import utils
 
-from models import RealNVP, RealNVPLoss
+from flow_ssl.realnvp import RealNVP, RealNVPLoss
 from tqdm import tqdm
+from torch import distributions
 
 
 def main(args):
@@ -30,10 +31,10 @@ def main(args):
         transforms.ToTensor()
     ])
 
-    trainset = torchvision.datasets.CIFAR10(root='data', train=True, download=True, transform=transform_train)
+    trainset = torchvision.datasets.CIFAR10(root=args.data_path, train=True, download=True, transform=transform_train)
     trainloader = data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
-    testset = torchvision.datasets.CIFAR10(root='data', train=False, download=True, transform=transform_test)
+    testset = torchvision.datasets.CIFAR10(root=args.data_path, train=False, download=True, transform=transform_test)
     testloader = data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     # Model
@@ -42,7 +43,7 @@ def main(args):
     net = net.to(device)
     if device == 'cuda':
         net = torch.nn.DataParallel(net, args.gpu_ids)
-        cudnn.benchmark = args.benchmark
+        cudnn.benchmark = True #args.benchmark
 
     if args.resume:
         # Load checkpoint.
@@ -54,8 +55,13 @@ def main(args):
         best_loss = checkpoint['test_loss']
         start_epoch = checkpoint['epoch']
 
-    loss_fn = RealNVPLoss()
-    param_groups = util.get_param_groups(net, args.weight_decay, norm_suffix='weight_g')
+    D = (32 * 32 * 3)
+    prior = distributions.MultivariateNormal(torch.zeros(D).to(device),
+                                             torch.eye(D).to(device))
+    loss_fn = RealNVPLoss(prior)
+
+    #PAVEL: check why do we need this
+    param_groups = utils.get_param_groups(net, args.weight_decay, norm_suffix='weight_g')
     optimizer = optim.Adam(param_groups, lr=args.lr)
 
     for epoch in range(start_epoch, start_epoch + args.num_epochs):
@@ -66,7 +72,7 @@ def main(args):
 def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm):
     print('\nEpoch: %d' % epoch)
     net.train()
-    loss_meter = util.AverageMeter()
+    loss_meter = utils.AverageMeter()
     with tqdm(total=len(trainloader.dataset)) as progress_bar:
         for x, _ in trainloader:
             x = x.to(device)
@@ -75,11 +81,11 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm):
             loss = loss_fn(z, sldj)
             loss_meter.update(loss.item(), x.size(0))
             loss.backward()
-            util.clip_grad_norm(optimizer, max_grad_norm)
+            utils.clip_grad_norm(optimizer, max_grad_norm)
             optimizer.step()
 
             progress_bar.set_postfix(loss=loss_meter.avg,
-                                     bpd=util.bits_per_dim(x, loss_meter.avg))
+                                     bpd=utils.bits_per_dim(x, loss_meter.avg))
             progress_bar.update(x.size(0))
 
 
@@ -101,7 +107,7 @@ def sample(net, batch_size, device):
 def test(epoch, net, testloader, device, loss_fn, num_samples):
     global best_loss
     net.eval()
-    loss_meter = util.AverageMeter()
+    loss_meter = utils.AverageMeter()
     with torch.no_grad():
         with tqdm(total=len(testloader.dataset)) as progress_bar:
             for x, _ in testloader:
@@ -110,7 +116,7 @@ def test(epoch, net, testloader, device, loss_fn, num_samples):
                 loss = loss_fn(z, sldj)
                 loss_meter.update(loss.item(), x.size(0))
                 progress_bar.set_postfix(loss=loss_meter.avg,
-                                         bpd=util.bits_per_dim(x, loss_meter.avg))
+                                         bpd=utils.bits_per_dim(x, loss_meter.avg))
                 progress_bar.update(x.size(0))
 
     # Save checkpoint
@@ -128,6 +134,7 @@ def test(epoch, net, testloader, device, loss_fn, num_samples):
     # Save samples and data
     images = sample(net, num_samples, device)
     os.makedirs('samples', exist_ok=True)
+    #PAVEL: make class_conditional sampling
     images_concat = torchvision.utils.make_grid(images, nrow=int(num_samples ** 0.5), padding=2, pad_value=255)
     torchvision.utils.save_image(images_concat, 'samples/epoch_{}.png'.format(epoch))
 
@@ -135,8 +142,10 @@ def test(epoch, net, testloader, device, loss_fn, num_samples):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='RealNVP on CIFAR-10')
 
+    parser.add_argument('--data_path', type=str, default=None, required=True, metavar='PATH',
+                    help='path to datasets location (default: None)')
     parser.add_argument('--batch_size', default=64, type=int, help='Batch size')
-    parser.add_argument('--benchmark', action='store_true', help='Turn on CUDNN benchmarking')
+    #parser.add_argument('--benchmark', action='store_true', help='Turn on CUDNN benchmarking')
     parser.add_argument('--gpu_ids', default='[0]', type=eval, help='IDs of GPUs to use')
     parser.add_argument('--lr', default=1e-3, type=float, help='Learning rate')
     parser.add_argument('--max_grad_norm', type=float, default=100., help='Max gradient norm for clipping')
