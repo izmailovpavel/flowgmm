@@ -10,7 +10,7 @@ class SSLGaussMixture(torch.distributions.Distribution):
         self.means = means.to(device)
         self.cov_stds = cov_stds
         if self.cov_stds is None:
-            self.cov_stds = torch.ones_like(means)
+            self.cov_stds = torch.ones((len(means)))
         self.device = device
 
     @property
