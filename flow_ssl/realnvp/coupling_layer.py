@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from enum import IntEnum
 from flow_ssl.resnet import ResNet
-from util import checkerboard_mask
+from flow_ssl.real_nvp.utils import checkerboard_mask
 
 
 class MaskType(IntEnum):
