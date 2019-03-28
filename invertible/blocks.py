@@ -10,9 +10,6 @@ import torchcontrib.nn.functional as contrib
 from torchdiffeq import odeint_adjoint as odeint
 
 
-class iResBlock(nn.Module):
-    pass
-
 
 @export
 class ConcatConv2d(nn.Module):

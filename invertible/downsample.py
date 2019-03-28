@@ -64,7 +64,26 @@ class padChannels(nn.Module):
 
     def inverse(self, x):
         return x[:, :x.size(1) - self.pad_size, :, :]
+    def logdet(self,inp):
+        return 0
 
+class keepChannels(nn.Module):
+    def __init__(self,k):
+        """k represents the number of channels in x to keep"""
+        super().__init__()
+        self.k = k
+    def forward(self,inp):
+        x,z = inp
+        x_new,z_extra = split(x,self.k)
+        z.append(z_extra)
+        return x_new,z
+    def inverse(self,output):
+        x_small,z_large = output
+        z_extra = z_large.pop(-1)
+        x = merge(x_small,z_extra)
+        return x, z_large
+    def logdet(self,inp):
+        return 0
 
 def split(x,k):
     x1 = x[:, :k, :, :].contiguous()
