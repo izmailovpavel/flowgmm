@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.real_nvp.coupling_layer import CouplingLayer, MaskType
-from util import squeeze_2x2
+from flow_ssl.realnvp.coupling_layer import CouplingLayer, MaskType
+from flow_ssl.realnvp.utils import squeeze_2x2
 
 
 class RealNVP(nn.Module):
@@ -25,7 +25,6 @@ class RealNVP(nn.Module):
         super(RealNVP, self).__init__()
         # Register data_constraint to pre-process images, not learnable
         self.register_buffer('data_constraint', torch.tensor([0.9], dtype=torch.float32))
-
         self.flows = _RealNVP(0, num_scales, in_channels, mid_channels, num_blocks)
 
     def forward(self, x, reverse=False):
@@ -43,6 +42,7 @@ class RealNVP(nn.Module):
 
         return x, sldj
 
+    #PAVEL: will need to understand what this preprocessing is doing
     def _pre_process(self, x):
         """Dequantize the input image `x` and convert to logits.
 
@@ -86,8 +86,9 @@ class _RealNVP(nn.Module):
     def __init__(self, scale_idx, num_scales, in_channels, mid_channels, num_blocks):
         super(_RealNVP, self).__init__()
 
-        self.is_last_block = scale_idx == num_scales - 1
+        self.is_last_block = (scale_idx == num_scales - 1)
 
+        # 3 coupling layers with alternating checkerboard masks
         self.in_couplings = nn.ModuleList([
             CouplingLayer(in_channels, mid_channels, num_blocks, MaskType.CHECKERBOARD, reverse_mask=False),
             CouplingLayer(in_channels, mid_channels, num_blocks, MaskType.CHECKERBOARD, reverse_mask=True),
@@ -98,11 +99,13 @@ class _RealNVP(nn.Module):
             self.in_couplings.append(
                 CouplingLayer(in_channels, mid_channels, num_blocks, MaskType.CHECKERBOARD, reverse_mask=True))
         else:
+            # 3 coupling layers with alternating channel-wise mask
             self.out_couplings = nn.ModuleList([
                 CouplingLayer(4 * in_channels, 2 * mid_channels, num_blocks, MaskType.CHANNEL_WISE, reverse_mask=False),
                 CouplingLayer(4 * in_channels, 2 * mid_channels, num_blocks, MaskType.CHANNEL_WISE, reverse_mask=True),
                 CouplingLayer(4 * in_channels, 2 * mid_channels, num_blocks, MaskType.CHANNEL_WISE, reverse_mask=False)
             ])
+            # PAVEL: why is this code recursive?
             self.next_block = _RealNVP(scale_idx + 1, num_scales, 2 * in_channels, 2 * mid_channels, num_blocks)
 
     def forward(self, x, sldj, reverse=False):
