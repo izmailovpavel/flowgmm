@@ -11,6 +11,8 @@ import torch.utils.data as data
 import torchvision
 import torchvision.transforms as transforms
 import utils
+import numpy as np
+from scipy.spatial.distance import cdist
 
 from flow_ssl.realnvp import RealNVP, RealNVPLoss
 from tqdm import tqdm
@@ -43,7 +45,7 @@ def main(args):
     testloader = data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     # Model
-    print('Building model..')
+    print('Building model...')
     net = RealNVP(num_scales=2, in_channels=3, mid_channels=64, num_blocks=8)
     net = net.to(device)
     if device == 'cuda':
@@ -60,15 +62,22 @@ def main(args):
         best_loss = checkpoint['test_loss']
         start_epoch = checkpoint['epoch']
 
+    #PAVEL: we need to find a good way of placing the means
     D = (32 * 32 * 3)
-    r = 1. #PAVEL: we might need to use distance similar to sqrt(D)
+    r = 2. 
     means = torch.zeros((10, D)).to(device)
-    mean_portion = 1 #D // 10
+    #mean_portion = D // 10
     for i in range(10):
-        means[i, i*mean_portion:(i+1)*mean_portion] = r
-    #PAVEL: think about mean choices
+        #means[i, i*mean_portion:(i+1)*mean_portion] = r
+        means[i, :] = r * (i-4)
     
+    #print("Computing the means")
+    #means = get_class_means(net, trainloader)
+    #writer.add_image("means", means)
+    #means = means.reshape((10, -1)).to(device)
     print(means)
+    means_np = means.cpu().numpy()
+    print("Pairwise dists:", cdist(means_np, means_np))
 
     prior = SSLGaussMixture(means, device=device)
     loss_fn = RealNVPLoss(prior)
@@ -82,6 +91,23 @@ def main(args):
         test(epoch, net, testloader, device, loss_fn, args.num_samples, writer)
 
 
+def get_class_means(net, trainloader):
+    with torch.no_grad():
+        means = torch.zeros((10, 3, 32, 32))
+        n_batches = 0
+        with tqdm(total=len(trainloader.dataset)) as progress_bar:
+            n_batches = len(trainloader)
+            for x, y in trainloader:
+                z, _ = net(x, reverse=False)
+                for i in range(10):
+                    means[i] += z[y == i].sum(dim=0).cpu() 
+                    #PAVEL: not the right way of computing means
+                progress_bar.set_postfix(max_mean=torch.max(means), 
+                                         min_mean=torch.min(means))
+                progress_bar.update(x.size(0))
+        means /= 5000
+        return means
+
 def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, writer):
     print('\nEpoch: %d' % epoch)
     net.train()
@@ -93,6 +119,7 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, wr
             y = y.to(device)
             optimizer.zero_grad()
             z, sldj = net(x, reverse=False)
+            #print(z.shape)
             #loss = loss_fn(z, y=y, sldj=sldj)
             loss = loss_fn(z, y=y, sldj=sldj)
             #print(loss)
@@ -180,7 +207,7 @@ def test(epoch, net, testloader, device, loss_fn, num_samples, writer):
     for i in range(10):
         images_cls = sample(net, loss_fn.prior, num_samples // 10, cls=i, device=device)
         images.append(images_cls)
-        writer.add_image("Samples "+str(i), images_cls)
+        writer.add_image("samples/class_"+str(i), images_cls)
     images = torch.cat(images)
     os.makedirs('samples', exist_ok=True)
     images_concat = torchvision.utils.make_grid(images, nrow=num_samples //  10 , padding=2, pad_value=255)
