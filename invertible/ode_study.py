@@ -8,16 +8,16 @@ from iresnet import iResnet
 from oil.tuning.study import Study, train_trial
 # from oil.tuning.configGenerator import uniform,logUniform
 
-log_dir_base = os.path.expanduser('~/tb-experiments/ode_clip_inv2')
+log_dir_base = os.path.expanduser('~/tb-experiments/iresnet_singular2')
 cfg_spec = {
     'dataset': CIFAR10,
     'network': iResnet,
-    'net_config': {'gn':False},
+    'net_config': {'sigma':[.7,.8]},
     'loader_config': {'amnt_dev':5000,'lab_BS':64},
     'opt_config':{'lr':.1},
-    'num_epochs':10, 
+    'num_epochs':[25,50], 
     'trainer_config':{'log_dir':lambda cfg:log_dir_base+\
-        '/{}/{}'.format(cfg['dataset'],cfg['network'])}
+        '/{}/{}/s{}'.format(cfg['dataset'],cfg['network'],cfg['net_config']['sigma'])}
     }
 #ODEResnet,RNNResnet,,SplitODEResnet,SmallResnet,BezierRNNSplit,BezierODE,BezierRNN
 do_trial = simpleClassifierTrial(strict=True)

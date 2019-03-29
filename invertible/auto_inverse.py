@@ -15,4 +15,5 @@ class SequentialWithAutoInverseAndLogDet(torch.nn.Sequential):
             log_det += module.logdet(x)
         return log_det
 
-torch.nn.Sequential = SequentialWithAutoInverseAndLogDet
+#torch.nn.Sequential = SequentialWithAutoInverseAndLogDet
+iSequential = SequentialWithAutoInverseAndLogDet

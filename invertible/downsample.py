@@ -9,14 +9,12 @@ class SqueezeLayer(nn.Module):
     def __init__(self, downscale_factor):
         super().__init__()
         self.downscale_factor = downscale_factor
-    def forward(self, inp):
-        x,z = inp
-        return squeeze(x,self.downscale_factor),z
-    def inverse(self,out):
-        y,z_out = out
-        return unsqueeze(y,self.downscale_factor),z_out
-    def logdet(self,y):
-        raise NotImplementedError
+    def forward(self, x):
+        return squeeze(x,self.downscale_factor)
+    def inverse(self,y):
+        return unsqueeze(y,self.downscale_factor)
+    def logdet(self):
+        return 0
 
 def unsqueeze(input, upscale_factor=2):
     '''
@@ -64,7 +62,7 @@ class padChannels(nn.Module):
 
     def inverse(self, x):
         return x[:, :x.size(1) - self.pad_size, :, :]
-    def logdet(self,inp):
+    def logdet(self):
         return 0
 
 class keepChannels(nn.Module):
@@ -82,7 +80,7 @@ class keepChannels(nn.Module):
         z_extra = z_large.pop(-1)
         x = merge(x_small,z_extra)
         return x, z_large
-    def logdet(self,inp):
+    def logdet(self):
         return 0
 
 def split(x,k):
