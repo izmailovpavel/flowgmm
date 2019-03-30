@@ -141,8 +141,9 @@ parser.add_argument('--resume', '-r', action='store_true', help='Resume from che
 parser.add_argument('--weight_decay', default=5e-5, type=float,
                     help='L2 regularization (only applied to the weight norm scale factors)')
 
-parser.add_argument('--means', choices=['from_data', 'pixel_const', 'split_dims'], 
-                    default='pixel_const')
+parser.add_argument('--means', 
+                    choices=['from_data', 'pixel_const', 'split_dims', 'split_dims_v2', 'random'], 
+                    default='split_dims')
 parser.add_argument('--means_r', default=1., type=float,
                     help='r constant used when defyning means')
 parser.add_argument('--cov_std', default=1., type=float,
@@ -216,6 +217,20 @@ elif args.means == "split_dims":
     mean_portion = D // 10
     for i in range(10):
         means[i, i*mean_portion:(i+1)*mean_portion] = r
+elif args.means == "split_dims_v2":
+    means = means.reshape((10, 3, 32, 32))
+    for c in range(3):
+        if c == 2:
+            per_channel = 4
+        else:
+            per_channel = 3
+        mean_portion = 32 // per_channel
+        for i in range(per_channel):
+            means[c * 3 + i, c, i*mean_portion:(i+1)*mean_portion, :] = r
+    means = means.reshape((10, -1))
+elif args.means == "random":
+    for i in range(10):
+        means[i] = r * torch.randn(D)
 else:
     raise NotImplementedError(args.means)
 
