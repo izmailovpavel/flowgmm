@@ -52,10 +52,17 @@ class SSLGaussMixture(torch.distributions.Distribution):
             log_probs = mixture_log_probs
         return log_probs
 
-    def classify(self, x):
+    def class_logits(self, x):
         log_probs = torch.cat([g.log_prob(x)[:, None] for g in self.gaussians], dim=1)
+        return log_probs
+
+    def classify(self, x):
+        log_probs = self.class_logits(x)
         return torch.argmax(log_probs, dim=1)
 
+    def class_probs(self, x):
+        log_probs = self.class_logits(x)
+        return F.softmax(log_probs, dim=1)
 
 #PAVEL: remove later
 class SSLGaussMixtureClassifier(SSLGaussMixture):
