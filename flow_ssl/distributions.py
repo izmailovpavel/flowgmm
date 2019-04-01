@@ -40,7 +40,7 @@ class SSLGaussMixture(torch.distributions.Distribution):
         
     def log_prob(self, x, y=None, label_weight=1.):
         all_log_probs = torch.cat([g.log_prob(x)[:, None] for g in self.gaussians], dim=1)
-        mixture_log_probs = torch.logsumexp(all_log_probs / self.n_components, dim=1) 
+        mixture_log_probs = torch.logsumexp(all_log_probs, dim=1)# - torch.log(self.n_components)
         if y is not None:
             log_probs = torch.zeros_like(mixture_log_probs)
             mask = (y == -1)
@@ -48,9 +48,9 @@ class SSLGaussMixture(torch.distributions.Distribution):
             for i in range(self.n_components):
                 mask = (y == i)
                 log_probs[mask] += all_log_probs[:, i][mask] * label_weight
+            return log_probs
         else:
-            log_probs = mixture_log_probs
-        return log_probs
+            return mixture_log_probs
 
     def class_logits(self, x):
         log_probs = torch.cat([g.log_prob(x)[:, None] for g in self.gaussians], dim=1)

@@ -17,20 +17,16 @@ class RealNVPLoss(nn.Module):
         self.prior = prior
 
     def forward(self, z, sldj, y=None):
-        #PAVEL: need to figure out the shapes
-        #print("real_nvp_loss.py, RealNVPLoss, forward, z.shape", z.shape)
         z = z.reshape((z.shape[0], -1))
         if y is not None:
             prior_ll = self.prior.log_prob(z, y)
         else:
             prior_ll = self.prior.log_prob(z)
-        #print("real_nvp_loss.py, RealNVPLoss, forward, prior_ll.shape, z.shape",
-        #      prior_ll.shape, z.shape)
-        prior_ll -= np.log(self.k) * np.prod(z.size()[1:]) 
+        corrected_prior_ll = prior_ll - np.log(self.k) * np.prod(z.size()[1:]) 
         #PAVEL: this doesn't even affect the gradient, right?
         #PAVEL: I guess this is supposed to compute bits per dimension. Check
 
-        ll = prior_ll + sldj
+        ll = corrected_prior_ll + sldj
         nll = -ll.mean()
 
         return nll
