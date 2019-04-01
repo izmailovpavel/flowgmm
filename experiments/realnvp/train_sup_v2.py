@@ -159,6 +159,7 @@ parser.add_argument('--cov_std', default=1., type=float,
                     help='covariance std for the latent distribution')
 parser.add_argument('--save_freq', default=25, type=int, 
                     help='frequency of saving ckpts')
+parser.add_argument('--means_trainable', action='store_true', help='Use trainable means')
 
 
 args = parser.parse_args()
@@ -175,6 +176,7 @@ start_epoch = 0
 
 # Note: No normalization applied, since RealNVP expects inputs in (0, 1).
 transform_train = transforms.Compose([
+    transforms.RandomCrop(32, padding=4),
     transforms.RandomHorizontalFlip(),
     transforms.ToTensor()
 ])
@@ -249,8 +251,9 @@ print("Cov std:", cov_std)
 means_np = means.cpu().numpy()
 print("Pairwise dists:", cdist(means_np, means_np))
 
-print("Using learnable means")
-means = torch.tensor(means_np, requires_grad=True)
+if args.means_trainable:
+    print("Using learnable means")
+    means = torch.tensor(means_np, requires_grad=True)
 
 writer.add_image("means", means.reshape((10, 3, 32, 32)))
 prior = SSLGaussMixture(means, device=device)
