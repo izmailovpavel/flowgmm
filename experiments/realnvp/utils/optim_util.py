@@ -29,3 +29,8 @@ def clip_grad_norm(optimizer, max_norm, norm_type=2):
     """
     for group in optimizer.param_groups:
         utils.clip_grad_norm_(group['params'], max_norm, norm_type)
+
+def adjust_learning_rate(optimizer, lr):
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+    return lr
