@@ -158,7 +158,8 @@ parser.add_argument('--max_grad_norm', type=float, default=100., help='Max gradi
 parser.add_argument('--num_epochs', default=100, type=int, help='Number of epochs to train')
 parser.add_argument('--num_samples', default=50, type=int, help='Number of samples at test time')
 parser.add_argument('--num_workers', default=8, type=int, help='Number of data loader threads')
-parser.add_argument('--resume', '-r', action='store_true', help='Resume from checkpoint')
+parser.add_argument('--resume', type=str, default=None, required=False, metavar='PATH',
+                help='path to checkpoint to resume from (default: None)')
 parser.add_argument('--weight_decay', default=5e-5, type=float,
                     help='L2 regularization (only applied to the weight norm scale factors)')
 
@@ -211,13 +212,10 @@ if device == 'cuda':
     net = torch.nn.DataParallel(net, args.gpu_ids)
     cudnn.benchmark = True #args.benchmark
 
-if args.resume:
-    # Load checkpoint.
-    print('Resuming from checkpoint at ckpts/best.pth.tar...')
-    assert os.path.isdir('ckpts'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('ckpts/best.pth.tar')
+if args.resume is not None:
+    print('Resuming from checkpoint at', args.resume)
+    checkpoint = torch.load(args.resume)
     net.load_state_dict(checkpoint['net'])
-    best_loss = checkpoint['test_loss']
     start_epoch = checkpoint['epoch']
 
 #PAVEL: we need to find a good way of placing the means
