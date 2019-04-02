@@ -15,7 +15,8 @@ import utils
 import numpy as np
 from scipy.spatial.distance import cdist
 
-from flow_ssl.realnvp import RealNVP, RealNVPLoss
+from flow_ssl.realnvp import RealNVP
+from flow_ssl.realnvp import FlowLoss
 from tqdm import tqdm
 from torch import distributions
 
@@ -129,11 +130,15 @@ transform_test = transforms.Compose([
     transforms.ToTensor()
 ])
 
-trainset = torchvision.datasets.CIFAR10(root=args.data_path, train=True, download=True, transform=transform_train)
-trainloader = data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
-
-testset = torchvision.datasets.CIFAR10(root=args.data_path, train=False, download=True, transform=transform_test)
-testloader = data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+trainloader, testloader, _ = make_sup_data_loaders(
+        "cifar10", 
+        args.data_path, 
+        args.batch_size, 
+        args.num_workers, 
+        transform_train, 
+        transform_test, 
+        use_validation=False, 
+        shuffle_train=True)
 
 # Model
 print('Building model...')
@@ -155,7 +160,7 @@ if args.resume:
 D = 3 * 32 * 32
 prior = distributions.MultivariateNormal(torch.zeros(D).to(device),
                                                      torch.eye(D).to(device))
-loss_fn = RealNVPLoss(prior)
+loss_fn = FlowLoss(prior)
 
 #PAVEL: check why do we need this
 param_groups = utils.get_param_groups(net, args.weight_decay, norm_suffix='weight_g')

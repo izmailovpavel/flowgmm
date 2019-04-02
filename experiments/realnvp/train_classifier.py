@@ -17,9 +17,8 @@ from scipy.spatial.distance import cdist
 from torch.nn import functional as F
 from torch import nn
 
-from flow_ssl.realnvp import RealNVP, RealNVPLoss
+from flow_ssl.realnvp import RealNVP
 from tqdm import tqdm
-from flow_ssl.distributions import SSLGaussMixture
 
 from tensorboardX import SummaryWriter
 
@@ -157,6 +156,8 @@ parser.add_argument('--weight_decay', default=5e-5, type=float,
                     help='L2 regularization (only applied to the weight norm scale factors)')
 parser.add_argument('--save_freq', default=25, type=int, 
                     help='frequency of saving ckpts')
+parser.add_argument('--optimizer', choices=['SGD', 'Adam'], default='Adam')
+parser.add_argument('--schedule', choices=['wilson', 'no'], default='no')
 
 args = parser.parse_args()
 
@@ -181,11 +182,15 @@ transform_test = transforms.Compose([
     transforms.ToTensor()
 ])
 
-trainset = torchvision.datasets.CIFAR10(root=args.data_path, train=True, download=True, transform=transform_train)
-trainloader = data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
-
-testset = torchvision.datasets.CIFAR10(root=args.data_path, train=False, download=True, transform=transform_test)
-testloader = data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+trainloader, testloader, _ = make_sup_data_loaders(
+        "cifar10", 
+        args.data_path, 
+        args.batch_size, 
+        args.num_workers, 
+        transform_train, 
+        transform_test, 
+        use_validation=False, 
+        shuffle_train=True)
 
 # Model
 D = (32 * 32 * 3)
@@ -210,13 +215,18 @@ if args.resume is not None:
 param_groups = utils.get_param_groups(net, args.weight_decay, norm_suffix='weight_g')
 param_groups.append({'name': 'classifier', 'params': classifier.parameters()})
 
-optimizer = optim.SGD(param_groups, lr=args.lr)
+if args.optimizer == "SGD":
+    optimizer = optim.SGD(param_groups, lr=args.lr)
+elif args.optimizer == "Adam":
+    optimizer = optim.Adam(param_groups, lr=args.lr)
 
 for epoch in range(start_epoch, start_epoch + args.num_epochs):
-        
-    lr = schedule(epoch)
-    utils.adjust_learning_rate(optimizer, lr)   
-    writer.add_scalar("hypers/learning_rate", lr, epoch)
+
+    if args.schedule == 'wilson':
+        lr = schedule(epoch)
+        utils.adjust_learning_rate(optimizer, lr)	
+        writer.add_scalar("hypers/learning_rate", lr, epoch)
+
 
     train(epoch, net, classifier, trainloader, device, optimizer, args.max_grad_norm, writer)
     test(epoch, net, classifier, testloader, device, args.num_samples, writer)
