@@ -14,26 +14,12 @@ import torchvision.transforms as transforms
 import utils
 import numpy as np
 from scipy.spatial.distance import cdist
-from torch.nn import functional as F
+
+from flow_ssl.realnvp import RealNVP, RealNVPLoss
 from tqdm import tqdm
-from tensorboardX import SummaryWriter
-
-from flow_ssl.realnvp import RealNVP 
-from flow_ssl.realnvp import FlowLoss
 from flow_ssl.distributions import SSLGaussMixture
-from flow_ssl.data import make_sup_data_loaders
 
-
-def schedule(epoch):
-    lr_ratio = 0.01
-    t = epoch / args.num_epochs
-    if t <= 0.5:
-        factor = 1.0
-    elif t <= 0.9:
-        factor = 1.0 - (1.0 - lr_ratio) * (t - 0.5) / 0.4
-    else:
-        factor = lr_ratio
-    return args.lr * factor
+from tensorboardX import SummaryWriter
 
 
 def get_class_means(net, trainloader):
@@ -58,8 +44,6 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, wr
     print('\nEpoch: %d' % epoch)
     net.train()
     loss_meter = utils.AverageMeter()
-    loss_unsup_meter = utils.AverageMeter()
-    loss_nll_meter = utils.AverageMeter()
     acc_meter = utils.AverageMeter()
     with tqdm(total=len(trainloader.dataset)) as progress_bar:
         for x, y in trainloader:
@@ -67,35 +51,28 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, wr
             y = y.to(device)
             optimizer.zero_grad()
             z, sldj = net(x, reverse=False)
+            #print(z.shape)
+            #loss = loss_fn(z, y=y, sldj=sldj)
+            loss = loss_fn(z, y=y, sldj=sldj)
+            #print(loss)
+            loss_meter.update(loss.item(), x.size(0))
 
-            logits = loss_fn.prior.class_logits(z.reshape((len(z), -1)))
-            loss_nll = F.cross_entropy(logits, y)
-
-            loss_unsup = loss_fn(z, sldj=sldj)
-            loss = loss_nll + loss_unsup
+            preds = loss_fn.prior.classify(z.reshape((len(z), -1)))
+            preds = preds.reshape(y.shape)
+            acc = (preds == y).float().mean().item()
+            acc_meter.update(acc, x.size(0))
 
             loss.backward()
             utils.clip_grad_norm(optimizer, max_grad_norm)
             optimizer.step()
 
-            preds = torch.argmax(logits, dim=1)
-            acc = (preds == y).float().mean().item()
-
-            acc_meter.update(acc, x.size(0))
-            loss_meter.update(loss.item(), x.size(0))
-            loss_unsup_meter.update(loss_unsup.item(), x.size(0))
-            loss_nll_meter.update(loss_nll.item(), x.size(0))
-
             progress_bar.set_postfix(loss=loss_meter.avg,
-                                     bpd=utils.bits_per_dim(x, loss_unsup_meter.avg),
+                                     bpd=utils.bits_per_dim(x, loss_meter.avg),
                                      acc=acc_meter.avg)
             progress_bar.update(x.size(0))
-
     writer.add_scalar("train/loss", loss_meter.avg, epoch)
-    writer.add_scalar("train/loss_unsup", loss_unsup_meter.avg, epoch)
-    writer.add_scalar("train/loss_nll", loss_nll_meter.avg, epoch)
     writer.add_scalar("train/acc", acc_meter.avg, epoch)
-    writer.add_scalar("train/bpd", utils.bits_per_dim(x, loss_unsup_meter.avg), epoch)
+    writer.add_scalar("train/bpd", utils.bits_per_dim(x, loss_meter.avg), epoch)
 
 
 def sample(net, prior, batch_size, cls, device):
@@ -160,12 +137,10 @@ parser.add_argument('--max_grad_norm', type=float, default=100., help='Max gradi
 parser.add_argument('--num_epochs', default=100, type=int, help='Number of epochs to train')
 parser.add_argument('--num_samples', default=50, type=int, help='Number of samples at test time')
 parser.add_argument('--num_workers', default=8, type=int, help='Number of data loader threads')
-parser.add_argument('--resume', type=str, default=None, required=False, metavar='PATH',
-                help='path to checkpoint to resume from (default: None)')
+parser.add_argument('--resume', '-r', action='store_true', help='Resume from checkpoint')
 parser.add_argument('--weight_decay', default=5e-5, type=float,
                     help='L2 regularization (only applied to the weight norm scale factors)')
 
-# PAVEL
 parser.add_argument('--means', 
                     choices=['from_data', 'pixel_const', 'split_dims', 'split_dims_v2', 'random'], 
                     default='split_dims')
@@ -175,9 +150,6 @@ parser.add_argument('--cov_std', default=1., type=float,
                     help='covariance std for the latent distribution')
 parser.add_argument('--save_freq', default=25, type=int, 
                     help='frequency of saving ckpts')
-parser.add_argument('--means_trainable', action='store_true', help='Use trainable means')
-parser.add_argument('--optimizer', choices=['SGD', 'Adam'], default='Adam')
-parser.add_argument('--schedule', choices=['wilson', 'no'], default='no')
 
 
 args = parser.parse_args()
@@ -194,7 +166,6 @@ start_epoch = 0
 
 # Note: No normalization applied, since RealNVP expects inputs in (0, 1).
 transform_train = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
     transforms.RandomHorizontalFlip(),
     transforms.ToTensor()
 ])
@@ -203,15 +174,11 @@ transform_test = transforms.Compose([
     transforms.ToTensor()
 ])
 
-trainloader, testloader, _ = make_sup_data_loaders(
-        "cifar10", 
-        args.data_path, 
-        args.batch_size, 
-        args.num_workers, 
-        transform_train, 
-        transform_test, 
-        use_validation=False, 
-        shuffle_train=True)
+trainset = torchvision.datasets.CIFAR10(root=args.data_path, train=True, download=True, transform=transform_train)
+trainloader = data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+
+testset = torchvision.datasets.CIFAR10(root=args.data_path, train=False, download=True, transform=transform_test)
+testloader = data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
 # Model
 print('Building model...')
@@ -221,23 +188,23 @@ if device == 'cuda':
     net = torch.nn.DataParallel(net, args.gpu_ids)
     cudnn.benchmark = True #args.benchmark
 
-if args.resume is not None:
-    print('Resuming from checkpoint at', args.resume)
-    checkpoint = torch.load(args.resume)
+if args.resume:
+    # Load checkpoint.
+    print('Resuming from checkpoint at ckpts/best.pth.tar...')
+    assert os.path.isdir('ckpts'), 'Error: no checkpoint directory found!'
+    checkpoint = torch.load('ckpts/best.pth.tar')
     net.load_state_dict(checkpoint['net'])
+    best_loss = checkpoint['test_loss']
     start_epoch = checkpoint['epoch']
 
 #PAVEL: we need to find a good way of placing the means
 D = (32 * 32 * 3)
 r = args.means_r 
+means = torch.zeros((10, D)).to(device)
 cov_std = torch.ones((10)) * args.cov_std
 cov_std = cov_std.to(device)
-means = torch.zeros((10, D)).to(device)
 
-if args.resume is not None:
-    print("Using the means for ckpt")
-    means = checkpoint['means']
-elif args.means == "from_data":
+if args.means == "from_data":
     print("Computing the means")
     means = get_class_means(net, trainloader)
     means = means.reshape((10, -1)).to(device)
@@ -273,31 +240,15 @@ print("Cov std:", cov_std)
 means_np = means.cpu().numpy()
 print("Pairwise dists:", cdist(means_np, means_np))
 
-if args.means_trainable:
-    print("Using learnable means")
-    means = torch.tensor(means_np, requires_grad=True)
-
 writer.add_image("means", means.reshape((10, 3, 32, 32)))
 prior = SSLGaussMixture(means, device=device)
-loss_fn = FlowLoss(prior)
+loss_fn = RealNVPLoss(prior)
 
 #PAVEL: check why do we need this
 param_groups = utils.get_param_groups(net, args.weight_decay, norm_suffix='weight_g')
-if args.means_trainable:
-    param_groups.append({'name': 'means', 'params': means})
-
-if args.optimizer == "SGD":
-    optimizer = optim.SGD(param_groups, lr=args.lr)
-elif args.optimizer == "Adam":
-    optimizer = optim.Adam(param_groups, lr=args.lr)
+optimizer = optim.Adam(param_groups, lr=args.lr)
 
 for epoch in range(start_epoch, start_epoch + args.num_epochs):
-
-    if args.schedule == 'wilson':
-        lr = schedule(epoch)
-        utils.adjust_learning_rate(optimizer, lr)	
-        writer.add_scalar("hypers/learning_rate", lr, epoch)
-
     train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm, writer)
     test(epoch, net, testloader, device, loss_fn, args.num_samples, writer)
 
@@ -307,13 +258,11 @@ for epoch in range(start_epoch, start_epoch + args.num_epochs):
         state = {
             'net': net.state_dict(),
             'epoch': epoch,
-            'means': means
         }
         os.makedirs(args.ckptdir, exist_ok=True)
         torch.save(state, os.path.join(args.ckptdir, str(epoch)+'.pt'))
 
     # Save samples and data
-    writer.add_image("means", means.reshape((10, 3, 32, 32)))
     images = []
     for i in range(10):
         images_cls = sample(net, loss_fn.prior, args.num_samples // 10, cls=i, device=device)
