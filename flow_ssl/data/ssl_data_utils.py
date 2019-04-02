@@ -17,42 +17,51 @@ NO_LABEL = -1
 
 
 def make_ssl_data_loaders(
-        datadir,
-		labels,
-		train_transformation,
-        eval_transformation,
+        data_path,
+		label_path,
         labeled_batch_size,
         unlabeled_batch_size,
-        n_workers):
+        num_workers, 
+        transform_train, 
+        transform_test, 
+        use_validation=True, 
+        shuffle_train=True):
 
-    traindir = os.path.join(datadir, "train")
-    evaldir = os.path.join(datadir, "val")
-    train_dataset = torchvision.datasets.ImageFolder(traindir, train_transformation)
-    eval_dataset = torchvision.datasets.ImageFolder(evaldir, eval_transformation)
+    train_dir = os.path.join(data_path, "train")
+    if use_validation:
+        print("Using train + validation")
+        test_dir = os.path.join(data_path, "val")
+    else:
+        test_dir = os.path.join(data_path, "test")
+    train_set = torchvision.datasets.ImageFolder(train_dir, transform_train)
+    test_set = torchvision.datasets.ImageFolder(test_dir, transform_test)
 
-    with open(labels) as f:
+    num_classes = max(train_set.train_labels) + 1
+
+    with open(label_path) as f:
         labels = dict(line.split(' ') for line in f.read().splitlines())
-    labeled_idxs, unlabeled_idxs = data.relabel_dataset(dataset, labels)
-    assert len(dataset.imgs) == len(labeled_idxs) + len(unlabeled_idxs)
+    labeled_idxs, unlabeled_idxs = data.relabel_dataset(train_set, labels)
+    assert len(train_set.imgs) == len(labeled_idxs) + len(unlabeled_idxs)
 
     batch_sampler = LabeledUnlabeledBatchSampler(
             unlabeled_idxs, labeled_idxs, labeled_batch_size, unlabeled_batch_size)
 
     train_loader = torch.utils.data.DataLoader(
-            dataset,
+            train_set,
             batch_sampler=batch_sampler,
-            num_workers=n_workers,
+            shuffle=shuffle_train,
+            num_workers=num_workers,
             pin_memory=True)
 
-    eval_loader = torch.utils.data.DataLoader(
-            eval_dataset,
+    test_loader = torch.utils.data.DataLoader(
+            test_set,
             batch_size=batch_size,
             shuffle=False,
-            num_workers=2*n_workers,  # Needs images twice as fast
+            num_workers=2*num_workers,  # Needs images twice as fast
             pin_memory=True,
             drop_last=False)
 
-    return train_loader, eval_loader
+    return train_loader, test_loader, num_classes
 
 
 #PAVEL: relabels the dataset using the labels file.

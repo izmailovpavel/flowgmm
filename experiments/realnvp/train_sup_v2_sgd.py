@@ -89,6 +89,7 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, wr
                                      bpd=utils.bits_per_dim(x, loss_unsup_meter.avg),
                                      acc=acc_meter.avg)
             progress_bar.update(x.size(0))
+
     writer.add_scalar("train/loss", loss_meter.avg, epoch)
     writer.add_scalar("train/loss_unsup", loss_unsup_meter.avg, epoch)
     writer.add_scalar("train/loss_nll", loss_nll_meter.avg, epoch)
@@ -163,6 +164,7 @@ parser.add_argument('--resume', type=str, default=None, required=False, metavar=
 parser.add_argument('--weight_decay', default=5e-5, type=float,
                     help='L2 regularization (only applied to the weight norm scale factors)')
 
+# PAVEL
 parser.add_argument('--means', 
                     choices=['from_data', 'pixel_const', 'split_dims', 'split_dims_v2', 'random'], 
                     default='split_dims')
