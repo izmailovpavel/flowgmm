@@ -154,3 +154,42 @@ def grouper(iterable, n):
     args = [iter(iterable)] * n
     return zip(*args)
 
+
+def create_data_loaders(datadir,
+						labels,
+						train_transformation,
+                        eval_transformation,
+                        labeled_batch_size,
+                        batch_size,
+                        n_workers):
+    traindir = os.path.join(datadir, "train")
+    evaldir = os.path.join(datadir, "val")
+	#exclude_unlabeled = False
+    dataset = torchvision.datasets.ImageFolder(traindir, train_transformation)
+    with open(labels) as f:
+        labels = dict(line.split(' ') for line in f.read().splitlines())
+    labeled_idxs, unlabeled_idxs = data.relabel_dataset(dataset, labels)
+    assert len(dataset.imgs) == len(labeled_idxs) + len(unlabeled_idxs)
+
+    elif args.labeled_batch_size:
+        if len(unlabeled_idxs) == 0:
+          # for num labels = num images case
+          print("Setting unlabeled idxs = labeled idxs")
+          unlabeled_idxs = labeled_idxs
+        print("len(labeled_idxs)", len(labeled_idxs))
+        batch_sampler = data.TwoStreamBatchSampler(
+            unlabeled_idxs, labeled_idxs, args.batch_size, args.labeled_batch_size)
+    else:
+        assert False, "labeled batch size {}".format(args.labeled_batch_size)
+    train_loader = torch.utils.data.DataLoader(dataset,
+                                               batch_sampler=batch_sampler,
+                                               num_workers=n_workers,
+                                               pin_memory=True)
+    eval_loader = torch.utils.data.DataLoader(
+        torchvision.datasets.ImageFolder(evaldir, eval_transformation),
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=2 * args.workers,  # Needs images twice as fast
+        pin_memory=True,
+        drop_last=False)
+    return train_loader, eval_loader
