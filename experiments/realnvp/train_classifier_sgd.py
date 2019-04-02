@@ -25,6 +25,7 @@ from tensorboardX import SummaryWriter
 
 
 def schedule(epoch):
+    lr_ratio = 0.01
     t = epoch / args.num_epochs
     if t <= 0.5:
         factor = 1.0
