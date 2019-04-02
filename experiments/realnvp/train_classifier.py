@@ -24,6 +24,18 @@ from flow_ssl.distributions import SSLGaussMixture
 from tensorboardX import SummaryWriter
 
 
+def schedule(epoch):
+    lr_ratio = 0.01
+    t = epoch / args.num_epochs
+    if t <= 0.5:
+        factor = 1.0
+    elif t <= 0.9:
+        factor = 1.0 - (1.0 - lr_ratio) * (t - 0.5) / 0.4
+    else:
+        factor = lr_ratio
+    return args.lr * factor
+
+
 def get_class_means(net, trainloader):
     with torch.no_grad():
         means = torch.zeros((10, 3, 32, 32))
@@ -42,7 +54,7 @@ def get_class_means(net, trainloader):
         return means
 
 
-def train(epoch, net, classifier, trainloader, device, optimizer, loss_fn, max_grad_norm, writer):
+def train(epoch, net, classifier, trainloader, device, optimizer, max_grad_norm, writer):
     print('\nEpoch: %d' % epoch)
     net.train()
     loss_meter = utils.AverageMeter()
@@ -96,7 +108,7 @@ def sample(net, prior, batch_size, cls, device):
         return x
 
 
-def test(epoch, net, classifier, testloader, device, loss_fn, num_samples, writer):
+def test(epoch, net, classifier, testloader, device, num_samples, writer):
     net.eval()
     loss_meter = utils.AverageMeter()
     acc_meter = utils.AverageMeter()
@@ -139,21 +151,12 @@ parser.add_argument('--max_grad_norm', type=float, default=100., help='Max gradi
 parser.add_argument('--num_epochs', default=100, type=int, help='Number of epochs to train')
 parser.add_argument('--num_samples', default=50, type=int, help='Number of samples at test time')
 parser.add_argument('--num_workers', default=8, type=int, help='Number of data loader threads')
-parser.add_argument('--resume', '-r', action='store_true', help='Resume from checkpoint')
+parser.add_argument('--resume', type=str, default=None, required=False, metavar='PATH',
+                help='path to checkpoint to resume from (default: None)')
 parser.add_argument('--weight_decay', default=5e-5, type=float,
                     help='L2 regularization (only applied to the weight norm scale factors)')
-
-parser.add_argument('--means', 
-                    choices=['from_data', 'pixel_const', 'split_dims', 'split_dims_v2', 'random'], 
-                    default='split_dims')
-parser.add_argument('--means_r', default=1., type=float,
-                    help='r constant used when defyning means')
-parser.add_argument('--cov_std', default=1., type=float,
-                    help='covariance std for the latent distribution')
 parser.add_argument('--save_freq', default=25, type=int, 
                     help='frequency of saving ckpts')
-parser.add_argument('--means_trainable', action='store_true', help='Use trainable means')
-
 
 args = parser.parse_args()
 
@@ -196,97 +199,35 @@ if device == 'cuda':
     net = torch.nn.DataParallel(net, args.gpu_ids)
     cudnn.benchmark = True #args.benchmark
 
-if args.resume:
-    # Load checkpoint.
-    print('Resuming from checkpoint at ckpts/best.pth.tar...')
-    assert os.path.isdir('ckpts'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('ckpts/best.pth.tar')
+if args.resume is not None:
+    print('Resuming from checkpoint at', args.resume)
+    checkpoint = torch.load(args.resume)
     net.load_state_dict(checkpoint['net'])
-    best_loss = checkpoint['test_loss']
     start_epoch = checkpoint['epoch']
 
-#PAVEL: we need to find a good way of placing the means
-r = args.means_r 
-means = torch.zeros((10, D)).to(device)
-cov_std = torch.ones((10)) * args.cov_std
-cov_std = cov_std.to(device)
-
-if args.means == "from_data":
-    print("Computing the means")
-    means = get_class_means(net, trainloader)
-    means = means.reshape((10, -1)).to(device)
-
-elif args.means == "pixel_const":
-    for i in range(10):
-        means[i, :] = r * (i-4)
-
-elif args.means == "split_dims":
-    mean_portion = D // 10
-    for i in range(10):
-        means[i, i*mean_portion:(i+1)*mean_portion] = r
-elif args.means == "split_dims_v2":
-    means = means.reshape((10, 3, 32, 32))
-    for c in range(3):
-        if c == 2:
-            per_channel = 4
-        else:
-            per_channel = 3
-        mean_portion = 32 // per_channel
-        for i in range(per_channel):
-            means[c * 3 + i, c, i*mean_portion:(i+1)*mean_portion, :] = r
-    means = means.reshape((10, -1))
-elif args.means == "random":
-    for i in range(10):
-        means[i] = r * torch.randn(D)
-else:
-    raise NotImplementedError(args.means)
-
-
-print("Means:", means)
-print("Cov std:", cov_std)
-means_np = means.cpu().numpy()
-print("Pairwise dists:", cdist(means_np, means_np))
-
-if args.means_trainable:
-    print("Using learnable means")
-    means = torch.tensor(means_np, requires_grad=True)
-
-writer.add_image("means", means.reshape((10, 3, 32, 32)))
-prior = SSLGaussMixture(means, device=device)
-loss_fn = RealNVPLoss(prior)
 
 #PAVEL: check why do we need this
 param_groups = utils.get_param_groups(net, args.weight_decay, norm_suffix='weight_g')
-param_groups.append({'name': 'means', 'params': means})
 param_groups.append({'name': 'classifier', 'params': classifier.parameters()})
 
-optimizer = optim.Adam(param_groups, lr=args.lr)
+optimizer = optim.SGD(param_groups, lr=args.lr)
 
 for epoch in range(start_epoch, start_epoch + args.num_epochs):
-    train(epoch, net, classifier, trainloader, device, optimizer, loss_fn, args.max_grad_norm, writer)
-    test(epoch, net, classifier, testloader, device, loss_fn, args.num_samples, writer)
+        
+    lr = schedule(epoch)
+    utils.adjust_learning_rate(optimizer, lr)   
+    writer.add_scalar("hypers/learning_rate", lr, epoch)
+
+    train(epoch, net, classifier, trainloader, device, optimizer, args.max_grad_norm, writer)
+    test(epoch, net, classifier, testloader, device, args.num_samples, writer)
 
     # Save checkpoint
     if (epoch % args.save_freq == 0):
         print('Saving...')
         state = {
             'net': net.state_dict(),
+            'classifier': classifier.state_dict(),
             'epoch': epoch,
-            'means': means
         }
         os.makedirs(args.ckptdir, exist_ok=True)
         torch.save(state, os.path.join(args.ckptdir, str(epoch)+'.pt'))
-
-    # Save samples and data
-    writer.add_image("means", means.reshape((10, 3, 32, 32)))
-    images = []
-    for i in range(10):
-        images_cls = sample(net, loss_fn.prior, args.num_samples // 10, cls=i, device=device)
-        images.append(images_cls)
-        writer.add_image("samples/class_"+str(i), images_cls)
-    images = torch.cat(images)
-    os.makedirs(os.path.join(args.ckptdir, 'samples'), exist_ok=True)
-    images_concat = torchvision.utils.make_grid(images, nrow=args.num_samples //  10 , padding=2, pad_value=255)
-    os.makedirs(args.ckptdir, exist_ok=True)
-    torchvision.utils.save_image(images_concat, 
-                                os.path.join(args.ckptdir, 'samples/epoch_{}.png'.format(epoch)))

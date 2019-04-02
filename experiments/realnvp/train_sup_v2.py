@@ -23,6 +23,18 @@ from flow_ssl.distributions import SSLGaussMixture
 from tensorboardX import SummaryWriter
 
 
+def schedule(epoch):
+    lr_ratio = 0.01
+    t = epoch / args.num_epochs
+    if t <= 0.5:
+        factor = 1.0
+    elif t <= 0.9:
+        factor = 1.0 - (1.0 - lr_ratio) * (t - 0.5) / 0.4
+    else:
+        factor = lr_ratio
+    return args.lr * factor
+
+
 def get_class_means(net, trainloader):
     with torch.no_grad():
         means = torch.zeros((10, 3, 32, 32))
@@ -77,6 +89,7 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, wr
                                      bpd=utils.bits_per_dim(x, loss_unsup_meter.avg),
                                      acc=acc_meter.avg)
             progress_bar.update(x.size(0))
+
     writer.add_scalar("train/loss", loss_meter.avg, epoch)
     writer.add_scalar("train/loss_unsup", loss_unsup_meter.avg, epoch)
     writer.add_scalar("train/loss_nll", loss_nll_meter.avg, epoch)
@@ -146,10 +159,12 @@ parser.add_argument('--max_grad_norm', type=float, default=100., help='Max gradi
 parser.add_argument('--num_epochs', default=100, type=int, help='Number of epochs to train')
 parser.add_argument('--num_samples', default=50, type=int, help='Number of samples at test time')
 parser.add_argument('--num_workers', default=8, type=int, help='Number of data loader threads')
-parser.add_argument('--resume', '-r', action='store_true', help='Resume from checkpoint')
+parser.add_argument('--resume', type=str, default=None, required=False, metavar='PATH',
+                help='path to checkpoint to resume from (default: None)')
 parser.add_argument('--weight_decay', default=5e-5, type=float,
                     help='L2 regularization (only applied to the weight norm scale factors)')
 
+# PAVEL
 parser.add_argument('--means', 
                     choices=['from_data', 'pixel_const', 'split_dims', 'split_dims_v2', 'random'], 
                     default='split_dims')
@@ -199,23 +214,23 @@ if device == 'cuda':
     net = torch.nn.DataParallel(net, args.gpu_ids)
     cudnn.benchmark = True #args.benchmark
 
-if args.resume:
-    # Load checkpoint.
-    print('Resuming from checkpoint at ckpts/best.pth.tar...')
-    assert os.path.isdir('ckpts'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('ckpts/best.pth.tar')
+if args.resume is not None:
+    print('Resuming from checkpoint at', args.resume)
+    checkpoint = torch.load(args.resume)
     net.load_state_dict(checkpoint['net'])
-    best_loss = checkpoint['test_loss']
     start_epoch = checkpoint['epoch']
 
 #PAVEL: we need to find a good way of placing the means
 D = (32 * 32 * 3)
 r = args.means_r 
-means = torch.zeros((10, D)).to(device)
 cov_std = torch.ones((10)) * args.cov_std
 cov_std = cov_std.to(device)
+means = torch.zeros((10, D)).to(device)
 
-if args.means == "from_data":
+if args.resume is not None:
+    print("Using the means for ckpt")
+    means = checkpoint['means']
+elif args.means == "from_data":
     print("Computing the means")
     means = get_class_means(net, trainloader)
     means = means.reshape((10, -1)).to(device)
@@ -261,11 +276,17 @@ loss_fn = RealNVPLoss(prior)
 
 #PAVEL: check why do we need this
 param_groups = utils.get_param_groups(net, args.weight_decay, norm_suffix='weight_g')
-param_groups.append({'name': 'means', 'params': means})
+if args.means_trainable:
+    param_groups.append({'name': 'means', 'params': means})
 
-optimizer = optim.Adam(param_groups, lr=args.lr)
+optimizer = optim.SGD(param_groups, lr=args.lr)
 
 for epoch in range(start_epoch, start_epoch + args.num_epochs):
+
+    lr = schedule(epoch)
+    utils.adjust_learning_rate(optimizer, lr)	
+    writer.add_scalar("hypers/learning_rate", lr, epoch)
+
     train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm, writer)
     test(epoch, net, testloader, device, loss_fn, args.num_samples, writer)
 

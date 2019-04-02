@@ -1,9 +1,7 @@
 import numpy as np
 import torch.nn as nn
 
-#PAVEL:
-#TODO: change to FlowLoss, move outside of realnvp folder
-class RealNVPLoss(nn.Module):
+class FlowLoss(nn.Module):
     """Get the NLL loss for a RealNVP model.
 
     Args:
@@ -13,6 +11,7 @@ class RealNVPLoss(nn.Module):
     See Also:
         Equation (3) in the RealNVP paper: https://arxiv.org/abs/1605.08803
     """
+
     def __init__(self, prior, k=256):
         super(RealNVPLoss, self).__init__()
         self.k = k
@@ -25,8 +24,7 @@ class RealNVPLoss(nn.Module):
         else:
             prior_ll = self.prior.log_prob(z)
         corrected_prior_ll = prior_ll - np.log(self.k) * np.prod(z.size()[1:]) 
-        #PAVEL: this doesn't even affect the gradient, right?
-        #PAVEL: I guess this is supposed to compute bits per dimension. Check
+        #PAVEL: why the correction?
 
         ll = corrected_prior_ll + sldj
         nll = -ll.mean()
