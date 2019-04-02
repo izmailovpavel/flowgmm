@@ -1,6 +1,8 @@
 import numpy as np
 import torch.nn as nn
 
+#PAVEL:
+#TODO: change to FlowLoss, move outside of realnvp folder
 class RealNVPLoss(nn.Module):
     """Get the NLL loss for a RealNVP model.
 
