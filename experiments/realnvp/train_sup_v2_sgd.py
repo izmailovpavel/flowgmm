@@ -221,11 +221,14 @@ if args.resume is not None:
 #PAVEL: we need to find a good way of placing the means
 D = (32 * 32 * 3)
 r = args.means_r 
-means = torch.zeros((10, D)).to(device)
 cov_std = torch.ones((10)) * args.cov_std
 cov_std = cov_std.to(device)
+means = torch.zeros((10, D)).to(device)
 
-if args.means == "from_data":
+if args.resume is not None:
+    print("Using the means for ckpt")
+    means = checkpoint['means']
+elif args.means == "from_data":
     print("Computing the means")
     means = get_class_means(net, trainloader)
     means = means.reshape((10, -1)).to(device)
