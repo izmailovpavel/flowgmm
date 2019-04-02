@@ -16,41 +16,12 @@ import numpy as np
 from scipy.spatial.distance import cdist
 from torch.nn import functional as F
 from torch import nn
+from tensorboardX import SummaryWriter
 
 from flow_ssl.realnvp import RealNVP
 from tqdm import tqdm
 
-from tensorboardX import SummaryWriter
-
-
-def schedule(epoch):
-    lr_ratio = 0.01
-    t = epoch / args.num_epochs
-    if t <= 0.5:
-        factor = 1.0
-    elif t <= 0.9:
-        factor = 1.0 - (1.0 - lr_ratio) * (t - 0.5) / 0.4
-    else:
-        factor = lr_ratio
-    return args.lr * factor
-
-
-def get_class_means(net, trainloader):
-    with torch.no_grad():
-        means = torch.zeros((10, 3, 32, 32))
-        n_batches = 0
-        with tqdm(total=len(trainloader.dataset)) as progress_bar:
-            n_batches = len(trainloader)
-            for x, y in trainloader:
-                z, _ = net(x, reverse=False)
-                for i in range(10):
-                    means[i] += z[y == i].sum(dim=0).cpu() 
-                    #PAVEL: not the right way of computing means
-                progress_bar.set_postfix(max_mean=torch.max(means), 
-                                         min_mean=torch.min(means))
-                progress_bar.update(x.size(0))
-        means /= 5000
-        return means
+from .utils import wilson_schedule
 
 
 def train(epoch, net, classifier, trainloader, device, optimizer, max_grad_norm, writer):
@@ -87,24 +58,6 @@ def train(epoch, net, classifier, trainloader, device, optimizer, max_grad_norm,
     writer.add_scalar("train/loss", loss_meter.avg, epoch)
     writer.add_scalar("train/loss_nll", loss_nll_meter.avg, epoch)
     writer.add_scalar("train/acc", acc_meter.avg, epoch)
-
-
-def sample(net, prior, batch_size, cls, device):
-    """Sample from RealNVP model.
-
-    Args:
-        net (torch.nn.DataParallel): The RealNVP model wrapped in DataParallel.
-        batch_size (int): Number of samples to generate.
-        device (torch.device): Device to use.
-    """
-    #z = torch.randn((batch_size, 3, 32, 32), dtype=torch.float32, device=device)
-    with torch.no_grad():
-        z = prior.sample((batch_size,), gaussian_id=cls)
-        z = z.reshape((batch_size, 3, 32, 32))
-        x, _ = net(z, reverse=True)
-        x = torch.sigmoid(x)
-
-        return x
 
 
 def test(epoch, net, classifier, testloader, device, num_samples, writer):
@@ -154,6 +107,7 @@ parser.add_argument('--resume', type=str, default=None, required=False, metavar=
                 help='path to checkpoint to resume from (default: None)')
 parser.add_argument('--weight_decay', default=5e-5, type=float,
                     help='L2 regularization (only applied to the weight norm scale factors)')
+
 parser.add_argument('--save_freq', default=25, type=int, 
                     help='frequency of saving ckpts')
 parser.add_argument('--optimizer', choices=['SGD', 'Adam'], default='Adam')
@@ -208,6 +162,7 @@ if args.resume is not None:
     print('Resuming from checkpoint at', args.resume)
     checkpoint = torch.load(args.resume)
     net.load_state_dict(checkpoint['net'])
+    classifier.load_state_dict(checkpoint['classifier'])
     start_epoch = checkpoint['epoch']
 
 
@@ -220,10 +175,10 @@ if args.optimizer == "SGD":
 elif args.optimizer == "Adam":
     optimizer = optim.Adam(param_groups, lr=args.lr)
 
-for epoch in range(start_epoch, start_epoch + args.num_epochs):
+for epoch in range(start_epoch, args.num_epochs):
 
     if args.schedule == 'wilson':
-        lr = schedule(epoch)
+        lr = wilson_schedule(epoch, args.num_epochs)
         utils.adjust_learning_rate(optimizer, lr)	
         writer.add_scalar("hypers/learning_rate", lr, epoch)
 

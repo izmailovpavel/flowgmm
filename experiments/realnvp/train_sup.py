@@ -23,37 +23,11 @@ from flow_ssl.realnvp import FlowLoss
 from flow_ssl.distributions import SSLGaussMixture
 from flow_ssl.data import make_sup_data_loaders
 
-
-def schedule(epoch):
-    lr_ratio = 0.01
-    t = epoch / args.num_epochs
-    if t <= 0.5:
-        factor = 1.0
-    elif t <= 0.9:
-        factor = 1.0 - (1.0 - lr_ratio) * (t - 0.5) / 0.4
-    else:
-        factor = lr_ratio
-    return args.lr * factor
+from .util import get_means
+from .util import wilson_schedule
 
 
-def get_class_means(net, trainloader):
-    with torch.no_grad():
-        means = torch.zeros((10, 3, 32, 32))
-        n_batches = 0
-        with tqdm(total=len(trainloader.dataset)) as progress_bar:
-            n_batches = len(trainloader)
-            for x, y in trainloader:
-                z, _ = net(x, reverse=False)
-                for i in range(10):
-                    means[i] += z[y == i].sum(dim=0).cpu() 
-                    #PAVEL: not the right way of computing means
-                progress_bar.set_postfix(max_mean=torch.max(means), 
-                                         min_mean=torch.min(means))
-                progress_bar.update(x.size(0))
-        means /= 5000
-        return means
-
-
+#PAVEL: think of a good way to reuse the training code for (semi/un/)supervised
 def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, writer):
     print('\nEpoch: %d' % epoch)
     net.train()
@@ -232,40 +206,11 @@ D = (32 * 32 * 3)
 r = args.means_r 
 cov_std = torch.ones((10)) * args.cov_std
 cov_std = cov_std.to(device)
-means = torch.zeros((10, D)).to(device)
+means = get_means(args.means, r=args.r, trainloader=trainloader)
 
 if args.resume is not None:
     print("Using the means for ckpt")
     means = checkpoint['means']
-elif args.means == "from_data":
-    print("Computing the means")
-    means = get_class_means(net, trainloader)
-    means = means.reshape((10, -1)).to(device)
-
-elif args.means == "pixel_const":
-    for i in range(10):
-        means[i, :] = r * (i-4)
-
-elif args.means == "split_dims":
-    mean_portion = D // 10
-    for i in range(10):
-        means[i, i*mean_portion:(i+1)*mean_portion] = r
-elif args.means == "split_dims_v2":
-    means = means.reshape((10, 3, 32, 32))
-    for c in range(3):
-        if c == 2:
-            per_channel = 4
-        else:
-            per_channel = 3
-        mean_portion = 32 // per_channel
-        for i in range(per_channel):
-            means[c * 3 + i, c, i*mean_portion:(i+1)*mean_portion, :] = r
-    means = means.reshape((10, -1))
-elif args.means == "random":
-    for i in range(10):
-        means[i] = r * torch.randn(D)
-else:
-    raise NotImplementedError(args.means)
 
 
 print("Means:", means)
@@ -291,10 +236,10 @@ if args.optimizer == "SGD":
 elif args.optimizer == "Adam":
     optimizer = optim.Adam(param_groups, lr=args.lr)
 
-for epoch in range(start_epoch, start_epoch + args.num_epochs):
+for epoch in range(start_epoch, args.num_epochs):
 
     if args.schedule == 'wilson':
-        lr = schedule(epoch)
+        lr = wilson_schedule(epoch, args.num_epochs)
         utils.adjust_learning_rate(optimizer, lr)	
         writer.add_scalar("hypers/learning_rate", lr, epoch)
 
