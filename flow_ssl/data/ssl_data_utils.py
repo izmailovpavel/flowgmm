@@ -16,13 +16,14 @@ LOG = logging.getLogger('main')
 NO_LABEL = -1
 
 
-def create_data_loaders(datadir,
-						labels,
-						train_transformation,
-                        eval_transformation,
-                        labeled_batch_size,
-                        unlabeled_batch_size,
-                        n_workers):
+def make_ssl_data_loaders(
+        datadir,
+		labels,
+		train_transformation,
+        eval_transformation,
+        labeled_batch_size,
+        unlabeled_batch_size,
+        n_workers):
 
     traindir = os.path.join(datadir, "train")
     evaldir = os.path.join(datadir, "val")

@@ -32,7 +32,8 @@ def make_moons_ssl():
 
     return data, labels
 
-def make_github_cat(img_path):
+#PAVEL: adapted from ffjord code
+def make_dataset_from_img(img_path):
     img = np.array(Image.open(img_path).convert('L'))
     h, w = img.shape
     xx = np.linspace(-4, 4, w)
@@ -57,7 +58,7 @@ def make_github_cat(img_path):
     X[:, 1] *=  -1.
     return X.astype(np.float32), np.ones(1000) * (-1)
 
-def make_npz(npz_path):
+def make_dataset_from_npz(npz_path):
     f = np.load(npz_path)
     data = f["data"].astype(np.float32)
     labels = f["labels"].astype(np.int)
