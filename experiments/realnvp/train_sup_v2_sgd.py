@@ -24,7 +24,7 @@ from tensorboardX import SummaryWriter
 
 
 def schedule(epoch):
-    t = epoch / args.epochs
+    t = epoch / args.num_epochs
     if t <= 0.5:
         factor = 1.0
     elif t <= 0.9:
@@ -279,7 +279,7 @@ optimizer = optim.SGD(param_groups, lr=args.lr)
 
 for epoch in range(start_epoch, start_epoch + args.num_epochs):
 
-	lr = schedule(epoch)
+    lr = schedule(epoch)
     utils.adjust_learning_rate(optimizer, lr)	
     writer.add_scalar("hypers/learning_rate", lr, epoch)
 

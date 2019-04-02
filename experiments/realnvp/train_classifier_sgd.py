@@ -25,7 +25,7 @@ from tensorboardX import SummaryWriter
 
 
 def schedule(epoch):
-    t = epoch / args.epochs
+    t = epoch / args.num_epochs
     if t <= 0.5:
         factor = 1.0
     elif t <= 0.9:
@@ -153,6 +153,8 @@ parser.add_argument('--num_workers', default=8, type=int, help='Number of data l
 parser.add_argument('--resume', '-r', action='store_true', help='Resume from checkpoint')
 parser.add_argument('--weight_decay', default=5e-5, type=float,
                     help='L2 regularization (only applied to the weight norm scale factors)')
+parser.add_argument('--save_freq', default=25, type=int, 
+                    help='frequency of saving ckpts')
 
 args = parser.parse_args()
 
@@ -204,7 +206,6 @@ if args.resume:
     best_loss = checkpoint['test_loss']
     start_epoch = checkpoint['epoch']
 
-writer.add_image("means", means.reshape((10, 3, 32, 32)))
 
 #PAVEL: check why do we need this
 param_groups = utils.get_param_groups(net, args.weight_decay, norm_suffix='weight_g')
@@ -213,9 +214,9 @@ param_groups.append({'name': 'classifier', 'params': classifier.parameters()})
 optimizer = optim.SGD(param_groups, lr=args.lr)
 
 for epoch in range(start_epoch, start_epoch + args.num_epochs):
-	
-	lr = schedule(epoch)
-    utils.adjust_learning_rate(optimizer, lr)	
+        
+    lr = schedule(epoch)
+    utils.adjust_learning_rate(optimizer, lr)   
     writer.add_scalar("hypers/learning_rate", lr, epoch)
 
     train(epoch, net, classifier, trainloader, device, optimizer, args.max_grad_norm, writer)
@@ -226,7 +227,7 @@ for epoch in range(start_epoch, start_epoch + args.num_epochs):
         print('Saving...')
         state = {
             'net': net.state_dict(),
-            'classifier': classifier.state_dict()
+            'classifier': classifier.state_dict(),
             'epoch': epoch,
         }
         os.makedirs(args.ckptdir, exist_ok=True)
