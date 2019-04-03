@@ -69,52 +69,6 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, wr
     writer.add_scalar("train/bpd", utils.bits_per_dim(x, loss_unsup_meter.avg), epoch)
 
 
-def sample(net, prior, batch_size, cls, device):
-    """Sample from RealNVP model.
-
-    Args:
-        net (torch.nn.DataParallel): The RealNVP model wrapped in DataParallel.
-        batch_size (int): Number of samples to generate.
-        device (torch.device): Device to use.
-    """
-    #z = torch.randn((batch_size, 3, 32, 32), dtype=torch.float32, device=device)
-    with torch.no_grad():
-        z = prior.sample((batch_size,), gaussian_id=cls)
-        z = z.reshape((batch_size, 3, 32, 32))
-        x, _ = net(z, reverse=True)
-        x = torch.sigmoid(x)
-
-        return x
-
-
-def test(epoch, net, testloader, device, loss_fn, num_samples, writer):
-    net.eval()
-    loss_meter = utils.AverageMeter()
-    acc_meter = utils.AverageMeter()
-    with torch.no_grad():
-        with tqdm(total=len(testloader.dataset)) as progress_bar:
-            for x, y in testloader:
-                x = x.to(device)
-                y = y.to(device)
-                z, sldj = net(x, reverse=False)
-                loss = loss_fn(z, y=y, sldj=sldj)
-                loss_meter.update(loss.item(), x.size(0))
-
-                preds = loss_fn.prior.classify(z.reshape((len(z), -1)))
-                preds = preds.reshape(y.shape)
-                acc = (preds == y).float().mean().item()
-                acc_meter.update(acc, x.size(0))
-
-                progress_bar.set_postfix(loss=loss_meter.avg,
-                                     bpd=utils.bits_per_dim(x, loss_meter.avg),
-                                     acc=acc_meter.avg)
-                progress_bar.update(x.size(0))
-
-    writer.add_scalar("test/loss", loss_meter.avg, epoch)
-    writer.add_scalar("test/acc", acc_meter.avg, epoch)
-    writer.add_scalar("test/bpd", utils.bits_per_dim(x, loss_meter.avg), epoch)
-
-
 parser = argparse.ArgumentParser(description='RealNVP on CIFAR-10')
 
 parser.add_argument('--data_path', type=str, default=None, required=True, metavar='PATH',
@@ -139,7 +93,7 @@ parser.add_argument('--weight_decay', default=5e-5, type=float,
 # PAVEL
 parser.add_argument('--means', 
                     choices=['from_data', 'pixel_const', 'split_dims', 'split_dims_v2', 'random'], 
-                    default='split_dims')
+                    default='random')
 parser.add_argument('--means_r', default=1., type=float,
                     help='r constant used when defyning means')
 parser.add_argument('--cov_std', default=1., type=float,
@@ -244,7 +198,7 @@ for epoch in range(start_epoch, args.num_epochs):
     writer.add_scalar("hypers/learning_rate", lr, epoch)
 
     train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm, writer)
-    test(epoch, net, testloader, device, loss_fn, args.num_samples, writer)
+    utils.test_classifier(epoch, net, testloader, device, loss_fn, writer)
 
     # Save checkpoint
     if (epoch % args.save_freq == 0):
@@ -261,7 +215,7 @@ for epoch in range(start_epoch, args.num_epochs):
     writer.add_image("means", means.reshape((10, 3, 32, 32)))
     images = []
     for i in range(10):
-        images_cls = sample(net, loss_fn.prior, args.num_samples // 10, cls=i, device=device)
+        images_cls = utils.sample(net, loss_fn.prior, args.num_samples // 10, cls=i, device=device)
         images.append(images_cls)
         writer.add_image("samples/class_"+str(i), images_cls)
     images = torch.cat(images)

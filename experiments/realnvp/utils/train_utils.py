@@ -57,3 +57,49 @@ def get_means(means_type, num_means=10, shape=(3, 32, 32), r=1, trainloader=None
         raise NotImplementedError(means_type)
 
     return means
+
+
+def sample(net, prior, batch_size, cls, device):
+    """Sample from RealNVP model.
+
+    Args:
+        net (torch.nn.DataParallel): The RealNVP model wrapped in DataParallel.
+        batch_size (int): Number of samples to generate.
+        device (torch.device): Device to use.
+    """
+    #z = torch.randn((batch_size, 3, 32, 32), dtype=torch.float32, device=device)
+    with torch.no_grad():
+        z = prior.sample((batch_size,), gaussian_id=cls)
+        z = z.reshape((batch_size, 3, 32, 32))
+        x, _ = net(z, reverse=True)
+        x = torch.sigmoid(x)
+
+        return x
+
+
+def test_classifier(epoch, net, testloader, device, loss_fn, writer):
+    net.eval()
+    loss_meter = utils.AverageMeter()
+    acc_meter = utils.AverageMeter()
+    with torch.no_grad():
+        with tqdm(total=len(testloader.dataset)) as progress_bar:
+            for x, y in testloader:
+                x = x.to(device)
+                y = y.to(device)
+                z, sldj = net(x, reverse=False)
+                loss = loss_fn(z, y=y, sldj=sldj)
+                loss_meter.update(loss.item(), x.size(0))
+
+                preds = loss_fn.prior.classify(z.reshape((len(z), -1)))
+                preds = preds.reshape(y.shape)
+                acc = (preds == y).float().mean().item()
+                acc_meter.update(acc, x.size(0))
+
+                progress_bar.set_postfix(loss=loss_meter.avg,
+                                     bpd=utils.bits_per_dim(x, loss_meter.avg),
+                                     acc=acc_meter.avg)
+                progress_bar.update(x.size(0))
+
+    writer.add_scalar("test/loss", loss_meter.avg, epoch)
+    writer.add_scalar("test/acc", acc_meter.avg, epoch)
+    writer.add_scalar("test/bpd", utils.bits_per_dim(x, loss_meter.avg), epoch)

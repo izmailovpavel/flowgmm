@@ -59,33 +59,6 @@ def train(epoch, net, classifier, trainloader, device, optimizer, max_grad_norm,
     writer.add_scalar("train/acc", acc_meter.avg, epoch)
 
 
-def test(epoch, net, classifier, testloader, device, num_samples, writer):
-    net.eval()
-    loss_meter = utils.AverageMeter()
-    acc_meter = utils.AverageMeter()
-    with torch.no_grad():
-        with tqdm(total=len(testloader.dataset)) as progress_bar:
-            for x, y in testloader:
-                x = x.to(device)
-                y = y.to(device)
-                z, sldj = net(x, reverse=False)
-                logits = classifier(z.reshape((len(z), -1)))
-                loss_nll = F.cross_entropy(logits, y)
-                loss = loss_nll
-
-                preds = torch.argmax(logits, dim=1)
-                acc = (preds == y).float().mean().item()
-                acc_meter.update(acc, x.size(0))
-                acc_meter.update(acc, x.size(0))
-
-                progress_bar.set_postfix(loss=loss_meter.avg,
-                                     acc=acc_meter.avg)
-                progress_bar.update(x.size(0))
-
-    writer.add_scalar("test/loss", loss_meter.avg, epoch)
-    writer.add_scalar("test/acc", acc_meter.avg, epoch)
-
-
 parser = argparse.ArgumentParser(description='RealNVP on CIFAR-10')
 
 parser.add_argument('--data_path', type=str, default=None, required=True, metavar='PATH',
@@ -186,7 +159,7 @@ for epoch in range(start_epoch, args.num_epochs):
 
 
     train(epoch, net, classifier, trainloader, device, optimizer, args.max_grad_norm, writer)
-    test(epoch, net, classifier, testloader, device, args.num_samples, writer)
+    utils.test_classifier(epoch, net, classifier, testloader, device, writer)
 
     # Save checkpoint
     if (epoch % args.save_freq == 0):
