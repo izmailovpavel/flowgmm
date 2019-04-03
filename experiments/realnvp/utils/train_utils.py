@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 
-def wilson_schedule(epoch, num_epochs):
+def wilson_schedule(lr_init, epoch, num_epochs):
     lr_ratio = 0.01
     t = epoch / num_epochs
     if t <= 0.5:
@@ -11,7 +11,7 @@ def wilson_schedule(epoch, num_epochs):
         factor = 1.0 - (1.0 - lr_ratio) * (t - 0.5) / 0.4
     else:
         factor = lr_ratio
-    return args.lr * factor
+    return lr_init * factor
 
 
 def get_class_means(net, trainloader, shape):
@@ -31,7 +31,7 @@ def get_class_means(net, trainloader, shape):
         means /= 5000
         return means
 
-def get_means(means_type, num_means=10, shape=(3, 32, 32), r=1, trainloader=None)
+def get_means(means_type, num_means=10, shape=(3, 32, 32), r=1, trainloader=None, device=None):
 
     D = np.prod(shape)
     means = torch.zeros((num_means, D)).to(device)

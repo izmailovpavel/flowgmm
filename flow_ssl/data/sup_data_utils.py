@@ -18,7 +18,7 @@ def make_sup_data_loaders(
     ds = getattr(torchvision.datasets, dataset)
 
     #PAVEL: need consistency for supervised and semi-supervised ds here
-    path = os.path.join(path, dataset.lower())
+    #path = os.path.join(path, dataset.lower())
 
     train_set = ds(root=path, train=True, download=True, transform=transform_train)
     num_classes = max(train_set.train_labels) + 1

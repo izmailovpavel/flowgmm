@@ -13,7 +13,7 @@ class FlowLoss(nn.Module):
     """
 
     def __init__(self, prior, k=256):
-        super(RealNVPLoss, self).__init__()
+        super().__init__()
         self.k = k
         self.prior = prior
 

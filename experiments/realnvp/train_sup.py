@@ -19,12 +19,9 @@ from tqdm import tqdm
 from tensorboardX import SummaryWriter
 
 from flow_ssl.realnvp import RealNVP 
-from flow_ssl.realnvp import FlowLoss
+from flow_ssl import FlowLoss
 from flow_ssl.distributions import SSLGaussMixture
 from flow_ssl.data import make_sup_data_loaders
-
-from .util import get_means
-from .util import wilson_schedule
 
 
 #PAVEL: think of a good way to reuse the training code for (semi/un/)supervised
@@ -178,7 +175,7 @@ transform_test = transforms.Compose([
 ])
 
 trainloader, testloader, _ = make_sup_data_loaders(
-        "cifar10", 
+        "CIFAR10", 
         args.data_path, 
         args.batch_size, 
         args.num_workers, 
@@ -206,7 +203,7 @@ D = (32 * 32 * 3)
 r = args.means_r 
 cov_std = torch.ones((10)) * args.cov_std
 cov_std = cov_std.to(device)
-means = get_means(args.means, r=args.r, trainloader=trainloader)
+means = utils.get_means(args.means, r=args.means_r, trainloader=trainloader, device=device)
 
 if args.resume is not None:
     print("Using the means for ckpt")
@@ -239,7 +236,7 @@ elif args.optimizer == "Adam":
 for epoch in range(start_epoch, args.num_epochs):
 
     if args.schedule == 'wilson':
-        lr = wilson_schedule(epoch, args.num_epochs)
+        lr = utils.wilson_schedule(args.lr, epoch, args.num_epochs)
         utils.adjust_learning_rate(optimizer, lr)	
         writer.add_scalar("hypers/learning_rate", lr, epoch)
 
