@@ -16,12 +16,13 @@ import numpy as np
 from scipy.spatial.distance import cdist
 
 from flow_ssl.realnvp import RealNVP
-from flow_ssl.realnvp import FlowLoss
+from flow_ssl import FlowLoss
 from tqdm import tqdm
 from torch import distributions
 
 from tensorboardX import SummaryWriter
 
+from flow_ssl.data import make_sup_data_loaders
 
 def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, writer):
     print('\nEpoch: %d' % epoch)
@@ -131,7 +132,7 @@ transform_test = transforms.Compose([
 ])
 
 trainloader, testloader, _ = make_sup_data_loaders(
-        "cifar10", 
+        "CIFAR10", 
         args.data_path, 
         args.batch_size, 
         args.num_workers, 
