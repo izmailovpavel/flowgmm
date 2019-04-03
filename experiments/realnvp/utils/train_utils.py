@@ -1,5 +1,8 @@
 import torch
 import numpy as np
+from tqdm import tqdm
+from .shell_util import AverageMeter
+from .optim_util import bits_per_dim
 
 
 def wilson_schedule(lr_init, epoch, num_epochs):
@@ -79,8 +82,8 @@ def sample(net, prior, batch_size, cls, device):
 
 def test_classifier(epoch, net, testloader, device, loss_fn, writer):
     net.eval()
-    loss_meter = utils.AverageMeter()
-    acc_meter = utils.AverageMeter()
+    loss_meter = AverageMeter()
+    acc_meter = AverageMeter()
     with torch.no_grad():
         with tqdm(total=len(testloader.dataset)) as progress_bar:
             for x, y in testloader:
@@ -96,10 +99,10 @@ def test_classifier(epoch, net, testloader, device, loss_fn, writer):
                 acc_meter.update(acc, x.size(0))
 
                 progress_bar.set_postfix(loss=loss_meter.avg,
-                                     bpd=utils.bits_per_dim(x, loss_meter.avg),
+                                     bpd=bits_per_dim(x, loss_meter.avg),
                                      acc=acc_meter.avg)
                 progress_bar.update(x.size(0))
 
     writer.add_scalar("test/loss", loss_meter.avg, epoch)
     writer.add_scalar("test/acc", acc_meter.avg, epoch)
-    writer.add_scalar("test/bpd", utils.bits_per_dim(x, loss_meter.avg), epoch)
+    writer.add_scalar("test/bpd", bits_per_dim(x, loss_meter.avg), epoch)

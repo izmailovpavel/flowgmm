@@ -44,9 +44,11 @@ def make_ssl_data_loaders(
     assert len(train_set.imgs) == len(labeled_idxs) + len(unlabeled_idxs)
 
     print("Num classes", num_classes)
+    print("Labeled data: ", len(labeled_idxs))
+    print("Unlabeled data:", len(unlabeled_idxs))
 
     batch_sampler = LabeledUnlabeledBatchSampler(
-            unlabeled_idxs, labeled_idxs, labeled_batch_size, unlabeled_batch_size)
+            labeled_idxs, unlabeled_idxs, labeled_batch_size, unlabeled_batch_size)
 
     train_loader = torch.utils.data.DataLoader(
             train_set,
@@ -113,6 +115,10 @@ class LabeledUnlabeledBatchSampler(Sampler):
 
         assert len(self.labeled_idx) >= self.labeled_batch_size > 0
         assert len(self.unlabeled_idx) >= self.unlabeled_batch_size > 0
+
+    @property
+    def num_labeled(self):
+        return len(self.labeled_idx)
 
     def __iter__(self):
         labeled_iter = iterate_once(self.labeled_idx)
