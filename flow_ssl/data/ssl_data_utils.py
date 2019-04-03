@@ -29,11 +29,12 @@ def make_ssl_data_loaders(
         use_validation=True, 
         ):
 
-    train_dir = os.path.join(data_path, "train")
     if use_validation:
         print("Using train + validation")
+        train_dir = os.path.join(data_path, "train")
         test_dir = os.path.join(data_path, "val")
     else:
+        train_dir = os.path.join(data_path, "train+val")
         test_dir = os.path.join(data_path, "test")
     train_set = torchvision.datasets.ImageFolder(train_dir, transform_train)
     test_set = torchvision.datasets.ImageFolder(test_dir, transform_test)
