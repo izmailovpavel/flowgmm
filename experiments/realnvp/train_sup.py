@@ -238,7 +238,10 @@ for epoch in range(start_epoch, args.num_epochs):
     if args.schedule == 'wilson':
         lr = utils.wilson_schedule(args.lr, epoch, args.num_epochs)
         utils.adjust_learning_rate(optimizer, lr)	
-        writer.add_scalar("hypers/learning_rate", lr, epoch)
+    else:
+        lr = args.lr
+
+    writer.add_scalar("hypers/learning_rate", lr, epoch)
 
     train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm, writer)
     test(epoch, net, testloader, device, loss_fn, args.num_samples, writer)

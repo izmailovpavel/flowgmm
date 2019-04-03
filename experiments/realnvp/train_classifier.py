@@ -17,11 +17,10 @@ from scipy.spatial.distance import cdist
 from torch.nn import functional as F
 from torch import nn
 from tensorboardX import SummaryWriter
-
-from flow_ssl.realnvp import RealNVP
 from tqdm import tqdm
 
-from .utils import wilson_schedule
+from flow_ssl.realnvp import RealNVP
+from flow_ssl.data import make_sup_data_loaders
 
 
 def train(epoch, net, classifier, trainloader, device, optimizer, max_grad_norm, writer):
@@ -137,7 +136,7 @@ transform_test = transforms.Compose([
 ])
 
 trainloader, testloader, _ = make_sup_data_loaders(
-        "cifar10", 
+        "CIFAR10", 
         args.data_path, 
         args.batch_size, 
         args.num_workers, 
@@ -178,9 +177,12 @@ elif args.optimizer == "Adam":
 for epoch in range(start_epoch, args.num_epochs):
 
     if args.schedule == 'wilson':
-        lr = wilson_schedule(epoch, args.num_epochs)
+        lr = utils.wilson_schedule(args.lr, epoch, args.num_epochs)
         utils.adjust_learning_rate(optimizer, lr)	
-        writer.add_scalar("hypers/learning_rate", lr, epoch)
+    else:
+        lr = args.lr
+
+    writer.add_scalar("hypers/learning_rate", lr, epoch)
 
 
     train(epoch, net, classifier, trainloader, device, optimizer, args.max_grad_norm, writer)
