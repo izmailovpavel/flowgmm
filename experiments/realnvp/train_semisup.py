@@ -119,12 +119,9 @@ parser.add_argument('--save_freq', default=25, type=int,
 parser.add_argument('--means_trainable', action='store_true', help='Use trainable means')
 parser.add_argument('--optimizer', choices=['SGD', 'Adam'], default='Adam')
 parser.add_argument('--schedule', choices=['wilson', 'no'], default='no')
-<<<<<<< HEAD
 parser.add_argument('--label_weight', default=1., type=float,
                     help='weight of the cross-entropy loss term')
-=======
 parser.add_argument('--supervised_only', action='store_true', help='Train on labeled data only')
->>>>>>> 36153c0fdbac877c1c242cfc68f5505f81e9a1e0
 
 
 args = parser.parse_args()
@@ -219,11 +216,7 @@ for epoch in range(start_epoch, args.num_epochs):
 
     writer.add_scalar("hypers/learning_rate", lr, epoch)
 
-<<<<<<< HEAD
-    train(epoch, net, trainloader, device, optimizer, loss_fn, args.label_weight, args.max_grad_norm, writer)
-=======
-    train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm, writer, use_unlab=not args.supervised_only)
->>>>>>> 36153c0fdbac877c1c242cfc68f5505f81e9a1e0
+    train(epoch, net, trainloader, device, optimizer, loss_fn, args.label_weight, args.max_grad_norm, writer, use_unlab=not args.supervised_only)
     utils.test_classifier(epoch, net, testloader, device, loss_fn, writer)
 
     # Save checkpoint
