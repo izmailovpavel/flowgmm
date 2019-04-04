@@ -26,11 +26,7 @@ from flow_ssl.data import NO_LABEL
 
 
 #PAVEL: think of a good way to reuse the training code for (semi/un/)supervised
-<<<<<<< HEAD
-def train(epoch, net, trainloader, device, optimizer, loss_fn, label_weight, max_grad_norm, writer):
-=======
-def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, writer, use_unlab=True):
->>>>>>> 36153c0fdbac877c1c242cfc68f5505f81e9a1e0
+def train(epoch, net, trainloader, device, optimizer, loss_fn, label_weight, max_grad_norm, writer, use_unlab=True):
     print('\nEpoch: %d' % epoch)
     net.train()
     loss_meter = utils.AverageMeter()
