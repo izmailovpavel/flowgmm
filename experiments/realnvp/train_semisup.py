@@ -26,7 +26,7 @@ from flow_ssl.data import NO_LABEL
 
 
 #PAVEL: think of a good way to reuse the training code for (semi/un/)supervised
-def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, writer):
+def train(epoch, net, trainloader, device, optimizer, loss_fn, label_weight, max_grad_norm, writer):
     print('\nEpoch: %d' % epoch)
     net.train()
     loss_meter = utils.AverageMeter()
@@ -52,7 +52,7 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, wr
             loss_nll = F.cross_entropy(logits, y_labeled)
 
             loss_unsup = loss_fn(z, sldj=sldj)
-            loss = loss_nll + loss_unsup
+            loss = loss_nll * label_weight + loss_unsup
 
             loss.backward()
             utils.clip_grad_norm(optimizer, max_grad_norm)
@@ -115,6 +115,8 @@ parser.add_argument('--save_freq', default=25, type=int,
 parser.add_argument('--means_trainable', action='store_true', help='Use trainable means')
 parser.add_argument('--optimizer', choices=['SGD', 'Adam'], default='Adam')
 parser.add_argument('--schedule', choices=['wilson', 'no'], default='no')
+parser.add_argument('--label_weight', default=1., type=float,
+                    help='weight of the cross-entropy loss term')
 
 
 args = parser.parse_args()
@@ -209,7 +211,7 @@ for epoch in range(start_epoch, args.num_epochs):
 
     writer.add_scalar("hypers/learning_rate", lr, epoch)
 
-    train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm, writer)
+    train(epoch, net, trainloader, device, optimizer, loss_fn, args.label_weight, args.max_grad_norm, writer)
     utils.test_classifier(epoch, net, testloader, device, loss_fn, writer)
 
     # Save checkpoint
