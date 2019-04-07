@@ -26,12 +26,15 @@ from flow_ssl.data import NO_LABEL
 
 
 #PAVEL: think of a good way to reuse the training code for (semi/un/)supervised
-def train(epoch, net, trainloader, device, optimizer, loss_fn, label_weight, max_grad_norm, writer, use_unlab=True):
+def train(epoch, net, trainloader, device, optimizer, loss_fn, 
+          label_weight, jaclogdet_reg, max_grad_norm, 
+          writer, use_unlab=True):
     print('\nEpoch: %d' % epoch)
     net.train()
     loss_meter = utils.AverageMeter()
     loss_unsup_meter = utils.AverageMeter()
     loss_nll_meter = utils.AverageMeter()
+    jaclogdet_meter = utils.AverageMeter()
     acc_meter = utils.AverageMeter()
     with tqdm(total=trainloader.batch_sampler.num_labeled) as progress_bar:
         for x, y in trainloader:
@@ -58,6 +61,8 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, label_weight, max
                 loss_unsup = torch.tensor([0.])
                 loss = loss_nll
 
+            loss += jaclogdet_reg * sldj.mean()
+
             loss.backward()
             utils.clip_grad_norm(optimizer, max_grad_norm)
             optimizer.step()
@@ -69,6 +74,7 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, label_weight, max
             loss_meter.update(loss.item(), x.size(0))
             loss_unsup_meter.update(loss_unsup.item(), x.size(0))
             loss_nll_meter.update(loss_nll.item(), x.size(0))
+            jaclogdet_meter.update(sldj.mean().item(), x.size(0))
 
             progress_bar.set_postfix(loss=loss_meter.avg,
                                      bpd=utils.bits_per_dim(x, loss_unsup_meter.avg),
@@ -78,6 +84,7 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, label_weight, max
     writer.add_scalar("train/loss", loss_meter.avg, epoch)
     writer.add_scalar("train/loss_unsup", loss_unsup_meter.avg, epoch)
     writer.add_scalar("train/loss_nll", loss_nll_meter.avg, epoch)
+    writer.add_scalar("train/jaclogdet", jaclogdet_meter.avg, epoch)
     writer.add_scalar("train/acc", acc_meter.avg, epoch)
     writer.add_scalar("train/bpd", utils.bits_per_dim(x, loss_unsup_meter.avg), epoch)
 
@@ -122,6 +129,8 @@ parser.add_argument('--schedule', choices=['wilson', 'no'], default='no')
 parser.add_argument('--label_weight', default=1., type=float,
                     help='weight of the cross-entropy loss term')
 parser.add_argument('--supervised_only', action='store_true', help='Train on labeled data only')
+parser.add_argument('--jaclogdet_reg', default=0., type=float,
+                    help='jacobian log-determinant regularizer weight')
 
 
 args = parser.parse_args()
@@ -216,7 +225,9 @@ for epoch in range(start_epoch, args.num_epochs):
 
     writer.add_scalar("hypers/learning_rate", lr, epoch)
 
-    train(epoch, net, trainloader, device, optimizer, loss_fn, args.label_weight, args.max_grad_norm, writer, use_unlab=not args.supervised_only)
+    train(epoch, net, trainloader, device, optimizer, loss_fn, 
+          args.label_weight, args.jaclogdet_reg, args.max_grad_norm, 
+          writer, use_unlab=not args.supervised_only)
     utils.test_classifier(epoch, net, testloader, device, loss_fn, writer)
 
     # Save checkpoint

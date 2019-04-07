@@ -83,6 +83,7 @@ def sample(net, prior, batch_size, cls, device):
 def test_classifier(epoch, net, testloader, device, loss_fn, writer):
     net.eval()
     loss_meter = AverageMeter()
+    jaclogdet_meter = utils.AverageMeter()
     acc_meter = AverageMeter()
     with torch.no_grad():
         with tqdm(total=len(testloader.dataset)) as progress_bar:
@@ -92,6 +93,7 @@ def test_classifier(epoch, net, testloader, device, loss_fn, writer):
                 z, sldj = net(x, reverse=False)
                 loss = loss_fn(z, y=y, sldj=sldj)
                 loss_meter.update(loss.item(), x.size(0))
+                jaclogdet_meter.update(sldj.mean().item(), x.size(0))
 
                 preds = loss_fn.prior.classify(z.reshape((len(z), -1)))
                 preds = preds.reshape(y.shape)
@@ -106,3 +108,4 @@ def test_classifier(epoch, net, testloader, device, loss_fn, writer):
     writer.add_scalar("test/loss", loss_meter.avg, epoch)
     writer.add_scalar("test/acc", acc_meter.avg, epoch)
     writer.add_scalar("test/bpd", bits_per_dim(x, loss_meter.avg), epoch)
+    writer.add_scalar("test/jaclogdet", jaclogdet_meter.avg, epoch)
