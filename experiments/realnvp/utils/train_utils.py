@@ -83,7 +83,7 @@ def sample(net, prior, batch_size, cls, device):
 def test_classifier(epoch, net, testloader, device, loss_fn, writer):
     net.eval()
     loss_meter = AverageMeter()
-    jaclogdet_meter = utils.AverageMeter()
+    jaclogdet_meter = AverageMeter()
     acc_meter = AverageMeter()
     with torch.no_grad():
         with tqdm(total=len(testloader.dataset)) as progress_bar:
