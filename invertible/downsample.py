@@ -77,8 +77,9 @@ class keepChannels(nn.Module):
         return x_new,z
     def inverse(self,output):
         x_small,z_large = output
-        z_extra = z_large.pop(-1)
-        x = merge(x_small,z_extra)
+        #z_extra = z_large.pop(-1)
+        x,z_large = merge(x_small,z_large[-1]),z_large[:-1]
+        #x = merge(x_small,z_extra)
         return x, z_large
     def logdet(self):
         return 0

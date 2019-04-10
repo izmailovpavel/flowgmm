@@ -53,7 +53,7 @@ class MeanOnlyBN(nn.BatchNorm2d):
         )
         bias_var = sumvar / numel
         if self.track_running_stats and not self.training:
-            mean, bias_var, = self.running_mean,self.running_var
+            mean, bias_var = self.running_mean,self.running_var
         inv_std = 1 / (bias_var + self.eps).pow(0.5).unsqueeze(1)
         mul = torch.min(inv_std * self.weight.unsqueeze(1),torch.ones_like(inv_std))
         output = ((input_ - mean.unsqueeze(1))  + self.bias.unsqueeze(1))
@@ -102,16 +102,21 @@ class iBN(nn.BatchNorm2d):
         )
         bias_var = sumvar / numel
         if self.track_running_stats and not self.training:
-            mean, bias_var, = self.running_mean,self.running_var
+            mean, bias_var = self.running_mean,self.running_var
         inv_std = 1 / (bias_var + self.eps).pow(0.5).unsqueeze(1)
+        self.numel,self.height,self.width,self.batchsize = numel,height,width,batchsize
         mul = inv_std * self.weight.unsqueeze(1)
+        self.inv_std = inv_std.detach()
         output = ((input_ - mean.unsqueeze(1))*mul  + self.bias.unsqueeze(1))
 
         return output.view(channels, batchsize, height, width).permute(1, 0, 2, 3).contiguous()
 
-    def logdet(self,input):
-        raise NotImplementedError
-        
+    def logdet(self):
+        mul = self.inv_std*self.weight.unsqueeze(1)
+        bn_logdet = (torch.log(mul).sum()*self.height*self.width).expand(self.batchsize)
+        #print(f"BN logdet: {bn_logdet}")
+        return bn_logdet
+
     def inverse(self,y):
         assert not self.training, "inverse must be computed in eval mode"
         batchsize, channels, height, width = y.size()

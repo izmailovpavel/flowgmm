@@ -28,10 +28,11 @@ class SN(nn.Module):
         if self._u is None:
             random_vec = torch.randn_like(x)[:1]
             self._u = random_vec/random_vec.norm()
-        u_and_mbx = torch.cat([self._u, x], 0)
-        v_and_mby = self.module(u_and_mbx)
-        v_, mby = torch.split(v_and_mby,[1,bs])
-        v = v_.detach()
-        self._s = (self._u*v).sum()
-        self._u = v/v.norm()
+        zeros = torch.zeros_like(self._u)
+        zeros_u_and_mbx = torch.cat([zeros,self._u, x], 0)
+        zeros_v_and_mby = self.module(zeros_u_and_mbx)
+        bias,v_, mby = torch.split(zeros_v_and_mby,[1,1,bs])
+        v = v_.detach()-bias
+        self._s = torch.abs((self._u*v).sum())
+        self._u = (v/v.norm()).detach()
         return mby/torch.max(self._s,torch.tensor(1.).to(x.device))
