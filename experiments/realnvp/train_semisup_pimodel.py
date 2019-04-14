@@ -142,6 +142,7 @@ parser.add_argument('--label_weight', default=1., type=float,
 parser.add_argument('--supervised_only', action='store_true', help='Train on labeled data only')
 parser.add_argument('--consistency_weight', default=100., type=float,
                     help='weight of the consistency loss term')
+parser.add_argument('--eval_freq', default=1, type=int, help='Number of epochs between evaluation')
 
 
 args = parser.parse_args()
@@ -240,7 +241,6 @@ for epoch in range(start_epoch, args.num_epochs):
     train(epoch, net, trainloader, device, optimizer, loss_fn, 
           args.label_weight, args.max_grad_norm, args.consistency_weight,
           writer, use_unlab=not args.supervised_only)
-    utils.test_classifier(epoch, net, testloader, device, loss_fn, writer)
 
     # Save checkpoint
     if (epoch % args.save_freq == 0):
@@ -254,15 +254,17 @@ for epoch in range(start_epoch, args.num_epochs):
         torch.save(state, os.path.join(args.ckptdir, str(epoch)+'.pt'))
 
     # Save samples and data
-    writer.add_image("means", means.reshape((10, 3, 32, 32)))
-    images = []
-    for i in range(10):
-        images_cls = utils.sample(net, loss_fn.prior, args.num_samples // 10, cls=i, device=device)
-        images.append(images_cls)
-        writer.add_image("samples/class_"+str(i), images_cls)
-    images = torch.cat(images)
-    os.makedirs(os.path.join(args.ckptdir, 'samples'), exist_ok=True)
-    images_concat = torchvision.utils.make_grid(images, nrow=args.num_samples //  10 , padding=2, pad_value=255)
-    os.makedirs(args.ckptdir, exist_ok=True)
-    torchvision.utils.save_image(images_concat, 
-                                os.path.join(args.ckptdir, 'samples/epoch_{}.png'.format(epoch)))
+    if epoch % args.eval_freq == 0:
+        utils.test_classifier(epoch, net, testloader, device, loss_fn, writer)
+        writer.add_image("means", means.reshape((10, 3, 32, 32)))
+        images = []
+        for i in range(10):
+            images_cls = utils.sample(net, loss_fn.prior, args.num_samples // 10, cls=i, device=device)
+            images.append(images_cls)
+            writer.add_image("samples/class_"+str(i), images_cls)
+        images = torch.cat(images)
+        os.makedirs(os.path.join(args.ckptdir, 'samples'), exist_ok=True)
+        images_concat = torchvision.utils.make_grid(images, nrow=args.num_samples //  10 , padding=2, pad_value=255)
+        os.makedirs(args.ckptdir, exist_ok=True)
+        torchvision.utils.save_image(images_concat, 
+                                    os.path.join(args.ckptdir, 'samples/epoch_{}.png'.format(epoch)))
