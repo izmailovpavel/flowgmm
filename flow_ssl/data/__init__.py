@@ -1,5 +1,6 @@
 from .ssl_data_utils import make_ssl_data_loaders
 from .ssl_data_utils import NO_LABEL
+from .ssl_data_utils import TransformTwice
 
 from .sup_data_utils import make_sup_data_loaders
 

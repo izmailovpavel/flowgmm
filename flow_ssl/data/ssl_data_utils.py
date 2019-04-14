@@ -152,6 +152,16 @@ def batch_iterator(iterable, n):
     return zip(*args)
 
 
+class TransformTwice:
+    def __init__(self, transform):
+        self.transform = transform
+
+    def __call__(self, inp):
+        out1 = self.transform(inp)
+        out2 = self.transform(inp)
+        return out1, out2
+
+
 #class RandomTranslateWithReflect:
 #    """Translate image randomly
 #
@@ -195,15 +205,3 @@ def batch_iterator(iterable, n):
 #                                    ypad + ysize - ytranslation))
 #
 #        return new_image
-#
-#
-##PAVEL: two different transformations to use for consistency regularization. 
-##PAVEL: will not use these for now
-#class TransformTwice:
-#    def __init__(self, transform):
-#        self.transform = transform
-#
-#    def __call__(self, inp):
-#        out1 = self.transform(inp)
-#        out2 = self.transform(inp)
-#        return out1, out2
