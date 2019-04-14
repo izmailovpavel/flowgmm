@@ -70,7 +70,7 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn,
                 loss = loss_nll
 
             # consistency loss
-            loss_consistency = torch.sum((z1 - z2)**2)
+            loss_consistency = torch.sum((z1 - z2)**2, dim=[1,2,3]).mean(dim=0)
             loss = loss + loss_consistency * consistency_weight
 
             loss.backward()
