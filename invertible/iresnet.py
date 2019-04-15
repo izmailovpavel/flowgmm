@@ -84,7 +84,7 @@ class iResBlock(nn.Module):
         x,y = self.x_y
         lndet = 0
         w = v = torch.randn_like(y)
-        for k in range(1,2):
+        for k in range(1,6):
             w = jvp(x,y,w)
             #print(len(w))
             wTv = (w*v).sum(3).sum(2).sum(1) # dont sum over batch dim
@@ -222,25 +222,25 @@ class iResnet(nn.Module,metaclass=Named):
         self.body = iSequential(
             padChannels(k-3),
             addZslot(),
-            #both(iBN(k),I),
+            both(iBN(k),I),
             iResBlock(k,k,sigma=sigma),
             both(SqueezeLayer(2),I),
-            #both(iBN(4*k),I),
+            both(iBN(4*k),I),
             iResBlock(4*k,4*k,sigma=sigma),
             keepChannels(2*k),
-            #both(iBN(2*k),I),
+            both(iBN(2*k),I),
             iResBlock(2*k,2*k,sigma=sigma),
             both(SqueezeLayer(2),I),
-            #both(iBN(8*k),I),
+            both(iBN(8*k),I),
             iResBlock(8*k,8*k,sigma=sigma),
             keepChannels(4*k),
-            #both(iBN(4*k),I),
+            both(iBN(4*k),I),
             iResBlock(4*k,4*k,sigma=sigma),
             both(SqueezeLayer(2),I),
-            #both(iBN(16*k),I),
+            both(iBN(16*k),I),
             iResBlock(16*k,16*k,sigma=sigma),
             keepChannels(8*k),
-            #both(iBN(8*k),I),
+            both(iBN(8*k),I),
             iResBlock(8*k,8*k,sigma=sigma),
             Join(),
         )
@@ -288,6 +288,12 @@ class iResnet(nn.Module,metaclass=Named):
     def sample(self,bs=1):
         z_all = [torch.randn(bs,*shape).to(self.device) for shape in self.z_shapes]
         return self.inverse(z_all)
+
+    # def log_data(self,logger,step):
+    #     for i,child in enumerate(self.body.named_children()):
+    #         name,m = child
+    #         if isinstance(m, SN):
+    #             logger.add_scalars('info',{'Sigma_{}'.format(name):m._s.cpu().data},step)
 
 @export
 class iResnetLarge(iResnet):
