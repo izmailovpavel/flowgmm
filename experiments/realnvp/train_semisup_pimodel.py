@@ -26,6 +26,14 @@ from flow_ssl.data import NO_LABEL
 from flow_ssl.data import TransformTwice
 
 
+#PAVEL: move to utils later
+def linear_rampup(final_value, epoch, num_epochs, start_epoch=0):
+    t = (epoch - start_epoch + 1) / num_epochs
+    if t > 1:
+        t = 1.
+    return t * final_value
+
+
 #PAVEL: think of a good way to reuse the training code for (semi/un/)supervised
 def train(epoch, net, trainloader, device, optimizer, loss_fn, 
           label_weight, max_grad_norm, consistency_weight,
@@ -143,6 +151,7 @@ parser.add_argument('--supervised_only', action='store_true', help='Train on lab
 parser.add_argument('--consistency_weight', default=100., type=float,
                     help='weight of the consistency loss term')
 parser.add_argument('--eval_freq', default=1, type=int, help='Number of epochs between evaluation')
+parser.add_argument('--consistency_rampup', default=1, type=int, help='Number of epochs for consistency loss rampup')
 
 
 args = parser.parse_args()
@@ -176,7 +185,7 @@ trainloader, testloader, _ = make_ssl_data_loaders(
         args.batch_size // 2, 
         args.num_workers, 
         transform_train, 
-       transform_test, 
+        transform_test, 
         use_validation=False)
 
 # Model
@@ -235,11 +244,14 @@ for epoch in range(start_epoch, args.num_epochs):
         utils.adjust_learning_rate(optimizer, lr)	
     else:
         lr = args.lr
-
+    
+    cons_weight = linear_rampup(args.consistency_weight, epoch, args.consistency_rampup, start_epoch)
+    
     writer.add_scalar("hypers/learning_rate", lr, epoch)
+    writer.add_scalar("hypers/consistency_weight", cons_weight, epoch)
 
     train(epoch, net, trainloader, device, optimizer, loss_fn, 
-          args.label_weight, args.max_grad_norm, args.consistency_weight,
+          args.label_weight, args.max_grad_norm, cons_weight,
           writer, use_unlab=not args.supervised_only)
 
     # Save checkpoint
