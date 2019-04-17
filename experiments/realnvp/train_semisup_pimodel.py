@@ -33,11 +33,27 @@ def linear_rampup(final_value, epoch, num_epochs, start_epoch=0):
         t = 1.
     return t * final_value
 
+# Pavel: From fast-SWA code
+def softmax_mse_loss(input_logits, target_logits):
+    """Takes softmax on both sides and returns MSE loss
+    Note:
+    - Returns the sum over all examples. Divide by the batch size afterwards
+      if you want the mean.
+    - Sends gradients to inputs but not the targets.
+    """
+    assert input_logits.size() == target_logits.size()
+    input_softmax = F.softmax(input_logits, dim=1)
+    target_softmax = F.softmax(target_logits, dim=1)
+    num_classes = input_logits.size()[1]
+    return F.mse_loss(input_softmax, target_softmax, size_average=False) / num_classes
+
 
 #PAVEL: think of a good way to reuse the training code for (semi/un/)supervised
 def train(epoch, net, trainloader, device, optimizer, loss_fn, 
           label_weight, max_grad_norm, consistency_weight,
-          writer, use_unlab=True):
+          writer, use_unlab=True, penalize_consistency_same_class=True,
+          pred_consistency=True
+          ):
     print('\nEpoch: %d' % epoch)
     net.train()
     loss_meter = utils.AverageMeter()
@@ -60,15 +76,18 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn,
                 x2 = x2.to(device)
                 z2, _ = net(x2, reverse=False)
                 z2 = z2.detach()
+                logits2 = loss_fn.prior.class_logits(z2.reshape((len(z2, -1))))
 
             z1, sldj = net(x1, reverse=False)
+            logits1 = loss_fn.prior.class_logits(z1.reshape((len(z1), -1)))
 
-            z_labeled = z1.reshape((len(z1), -1))
-            z_labeled = z_labeled[labeled_mask]
+            #z_labeled = z1.reshape((len(z1), -1))
+            #z_labeled = z_labeled[labeled_mask]
             y_labeled = y[labeled_mask]
 
-            logits = loss_fn.prior.class_logits(z_labeled)
-            loss_nll = F.cross_entropy(logits, y_labeled)
+            #logits = loss_fn.prior.class_logits(z_labeled)
+            logits_labeled = logits1[labeled_mask]
+            loss_nll = F.cross_entropy(logits_labeled, y_labeled)
 
             if use_unlab:
                 loss_unsup = loss_fn(z1, sldj=sldj)
@@ -78,7 +97,17 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn,
                 loss = loss_nll
 
             # consistency loss
-            loss_consistency = torch.sum((z1 - z2)**2, dim=[1,2,3]).mean(dim=0)
+            if pred_consistency:
+                loss_consistency = softmax_mse_loss(logits1, logits2)
+            else:
+                loss_consistency = torch.sum((z1 - z2)**2, dim=[1,2,3])
+            if not penalize_consistency_same_class:
+                with torch.no_grad():
+                    preds1 = loss_fn.prior.classify(z1.reshape((z1.shape[0], -1)))
+                    preds2 = loss_fn.prior.classify(z2.reshape((z1.shape[0], -1)))
+                    mask = (preds1 != preds2)
+                loss_consistency = loss_consistency[mask]
+            loss_consistency = loss_consistency.mean(dim=0)
             loss = loss + loss_consistency * consistency_weight
 
             loss.backward()
@@ -99,6 +128,9 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn,
                                      bpd=utils.bits_per_dim(x1, loss_unsup_meter.avg),
                                      acc=acc_meter.avg)
             progress_bar.update(y_labeled.size(0))
+
+    writer.add_image("data/x1", x1[:10])
+    writer.add_image("data/x2", x2[:10])
 
     writer.add_scalar("train/loss", loss_meter.avg, epoch)
     writer.add_scalar("train/loss_unsup", loss_unsup_meter.avg, epoch)
@@ -152,6 +184,8 @@ parser.add_argument('--consistency_weight', default=100., type=float,
                     help='weight of the consistency loss term')
 parser.add_argument('--eval_freq', default=1, type=int, help='Number of epochs between evaluation')
 parser.add_argument('--consistency_rampup', default=1, type=int, help='Number of epochs for consistency loss rampup')
+parser.add_argument('--consistency_diffclass_only', action='store_true', help='Only penalize consistency for objets that are in different classes')
+parser.add_argument('--pred_consistency', action='store_true', help='Use consistency on class probs instead of zs')
 
 
 args = parser.parse_args()
@@ -252,7 +286,10 @@ for epoch in range(start_epoch, args.num_epochs):
 
     train(epoch, net, trainloader, device, optimizer, loss_fn, 
           args.label_weight, args.max_grad_norm, cons_weight,
-          writer, use_unlab=not args.supervised_only)
+          writer, use_unlab=not args.supervised_only, 
+          penalize_consistency_same_class=not args.consistency_diffclass_only,
+          pred_consistency=args.pred_consistency
+         )
 
     # Save checkpoint
     if (epoch % args.save_freq == 0):
