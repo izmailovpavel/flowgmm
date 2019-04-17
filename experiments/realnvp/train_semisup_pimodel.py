@@ -76,7 +76,7 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn,
                 x2 = x2.to(device)
                 z2, _ = net(x2, reverse=False)
                 z2 = z2.detach()
-                logits2 = loss_fn.prior.class_logits(z2.reshape((len(z2, -1))))
+                logits2 = loss_fn.prior.class_logits(z2.reshape((len(z2), -1)))
 
             z1, sldj = net(x1, reverse=False)
             logits1 = loss_fn.prior.class_logits(z1.reshape((len(z1), -1)))
@@ -114,7 +114,7 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn,
             utils.clip_grad_norm(optimizer, max_grad_norm)
             optimizer.step()
 
-            preds = torch.argmax(logits, dim=1)
+            preds = torch.argmax(logits_labeled, dim=1)
             acc = (preds == y_labeled).float().mean().item()
 
             acc_meter.update(acc, x1.size(0))
