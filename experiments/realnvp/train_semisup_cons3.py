@@ -17,7 +17,6 @@ from scipy.spatial.distance import cdist
 from torch.nn import functional as F
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
-from PIL import Image
 
 from flow_ssl.realnvp import RealNVP 
 from flow_ssl import FlowLoss
@@ -49,9 +48,9 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn,
     jaclogdet_meter = utils.AverageMeter()
     acc_meter = utils.AverageMeter()
     with tqdm(total=trainloader.batch_sampler.num_labeled) as progress_bar:
-        for x, y in trainloader:
+        for (x1, x2), y in trainloader:
 
-            x = x.to(device)
+            x1 = x1.to(device)
             y = y.to(device)
 
             labeled_mask = (y != NO_LABEL)
@@ -59,85 +58,59 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn,
             optimizer.zero_grad()
 
             with torch.no_grad():
-                x = x.to(device)
-                z, _ = net(x, reverse=False)
-                z = z.detach()
+                x2 = x2.to(device)
+                z2, _ = net(x2, reverse=False)
+                z2 = z2.detach()
+                pred2 = loss_fn.prior.classify(z2.reshape((len(z2), -1)))
 
-            #PAVEL: simultaneously applying transformation to x and z
-            xs_transformed, zs_transformed = [], []
-            flip_mask = np.random.choice(2, size=len(x))
-            pil_img = Image.fromarray(np.zeros((36, 36, 3)).astype("uint8"))
-            for flip, x_img, z_img in zip(flip_mask, x, z):
-                assert x_img.shape == torch.Size([3, 32, 32])
-                assert z_img.shape == torch.Size([3, 32, 32])
-                if flip:
-                    x_img = torch.flip(x_img, dims=(2,))
-                    z_img = torch.flip(z_img, dims=(2,))
-                x_np = x_img.cpu().numpy()
-                z_np = z_img.cpu().numpy()
-                x_np = np.pad(x_np, ((0, 0), (4, 4), (4, 4)), "constant")
-                #removing crops for now
-                #z_np = np.pad(z_np, ((0, 0), (4, 4), (4, 4)), "constant")
-                i, j, h, w = transforms.RandomCrop.get_params(pil_img, output_size=(32, 32))
-                x_np = x_np[:, i:i+h, j:j+w]
-                #z_np = z_np[:, i:i+h, j:j+w]
-                xs_transformed.append(torch.tensor(x_np)[None, :])
-                zs_transformed.append(torch.tensor(z_np)[None, :])
-            t_x = torch.cat(xs_transformed).cuda()
-            t_z = torch.cat(zs_transformed).cuda()
+            z1, sldj = net(x1, reverse=False)
 
-            z_t, sldj = net(t_x, reverse=False)
-
-            z_labeled = z_t.reshape((len(z_t), -1))
+            z_labeled = z1.reshape((len(z1), -1))
             z_labeled = z_labeled[labeled_mask]
             y_labeled = y[labeled_mask]
 
-            logits = loss_fn.prior.class_logits(z_labeled)
-            loss_nll = F.cross_entropy(logits, y_labeled)
+            logits_labeled = loss_fn.prior.class_logits(z_labeled)
+            loss_nll = F.cross_entropy(logits_labeled, y_labeled)
 
             if use_unlab:
-                loss_unsup = loss_fn(z_t, sldj=sldj)
+                loss_unsup = loss_fn(z1, sldj=sldj)
                 loss = loss_nll * label_weight + loss_unsup
             else:
                 loss_unsup = torch.tensor([0.])
                 loss = loss_nll
 
-            loss_consistency = torch.sum((z_t - t_z)**2, dim=[1,2,3])
-            loss_consistency = loss_consistency.mean(dim=0)
-
+            # consistency loss
+            loss_consistency = loss_fn(z1, sldj=sldj, y=pred2)
             loss = loss + loss_consistency * consistency_weight
 
             loss.backward()
             utils.clip_grad_norm(optimizer, max_grad_norm)
             optimizer.step()
 
-            preds = torch.argmax(logits, dim=1)
+            preds = torch.argmax(logits_labeled, dim=1)
             acc = (preds == y_labeled).float().mean().item()
 
-            acc_meter.update(acc, x.size(0))
-            loss_meter.update(loss.item(), x.size(0))
-            loss_unsup_meter.update(loss_unsup.item(), x.size(0))
-            loss_nll_meter.update(loss_nll.item(), x.size(0))
-            jaclogdet_meter.update(sldj.mean().item(), x.size(0))
-            loss_consistency_meter.update(loss_consistency.item(), x.size(0))
+            acc_meter.update(acc, x1.size(0))
+            loss_meter.update(loss.item(), x1.size(0))
+            loss_unsup_meter.update(loss_unsup.item(), x1.size(0))
+            loss_nll_meter.update(loss_nll.item(), x1.size(0))
+            jaclogdet_meter.update(sldj.mean().item(), x1.size(0))
+            loss_consistency_meter.update(loss_consistency.item(), x1.size(0))
 
             progress_bar.set_postfix(loss=loss_meter.avg,
-                                     bpd=utils.bits_per_dim(x, loss_unsup_meter.avg),
+                                     bpd=utils.bits_per_dim(x1, loss_unsup_meter.avg),
                                      acc=acc_meter.avg)
             progress_bar.update(y_labeled.size(0))
 
-    writer.add_image("data/x", x[:10])
-    writer.add_image("data/t_x", t_x[:10])
-    writer.add_image("latent/z", z[:10])
-    writer.add_image("latent/t_z", t_z[:10])
-    writer.add_image("latent/z_t", z_t[:10])
+    writer.add_image("data/x1", x1[:10])
+    writer.add_image("data/x2", x2[:10])
 
     writer.add_scalar("train/loss", loss_meter.avg, epoch)
     writer.add_scalar("train/loss_unsup", loss_unsup_meter.avg, epoch)
     writer.add_scalar("train/loss_nll", loss_nll_meter.avg, epoch)
     writer.add_scalar("train/jaclogdet", jaclogdet_meter.avg, epoch)
     writer.add_scalar("train/acc", acc_meter.avg, epoch)
-    writer.add_scalar("train/bpd", utils.bits_per_dim(x, loss_unsup_meter.avg), epoch)
+    writer.add_scalar("train/bpd", utils.bits_per_dim(x1, loss_unsup_meter.avg), epoch)
     writer.add_scalar("train/loss_consistency", loss_consistency_meter.avg, epoch)
 
 
@@ -200,8 +173,11 @@ start_epoch = 0
 
 # Note: No normalization applied, since RealNVP expects inputs in (0, 1).
 transform_train = transforms.Compose([
+    transforms.RandomCrop(32, padding=4),
+    transforms.RandomHorizontalFlip(),
     transforms.ToTensor()
 ])
+transform_train = TransformTwice(transform_train)
 
 transform_test = transforms.Compose([
     transforms.ToTensor()
@@ -246,29 +222,17 @@ if args.resume is not None:
 print("Means:", means)
 print("Cov std:", cov_std)
 means_np = means.cpu().numpy()
-#PAVEL: making means invariant to horizontal flips
-means_np = means_np.reshape((10, 3, 32, 32))
-old_norm = np.linalg.norm(means_np)
-means_np = means_np + np.flip(means_np, axis=3)
-means_np /= np.linalg.norm(means_np)
-means_np *= old_norm
-print("Means are invariant to flips:", np.all(means_np == np.flip(means_np, axis=3)))
-means_np = means_np.reshape((10, -1))
-
-
 print("Pairwise dists:", cdist(means_np, means_np))
 
 if args.means_trainable:
     print("Using learnable means")
     means = torch.tensor(means_np, requires_grad=True)
-else:
-    means = torch.tensor(means_np, requires_grad=False)
 
-writer.add_image("means/means", means.reshape((10, 3, 32, 32)))
-writer.add_image("means/flipped", means.reshape((10, 3, 32, 32)).flip(2))
+writer.add_image("means", means.reshape((10, 3, 32, 32)))
 prior = SSLGaussMixture(means, device=device)
 loss_fn = FlowLoss(prior)
 
+#PAVEL: check why do we need this
 param_groups = utils.get_param_groups(net, args.weight_decay, norm_suffix='weight_g')
 if args.means_trainable:
     param_groups.append({'name': 'means', 'params': means})
