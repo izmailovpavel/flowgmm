@@ -6,13 +6,40 @@ import torch.nn as nn
 from torch.nn.functional import normalize
 from torch.nn.parameter import Parameter
 import numpy as np
-
+import torch.nn.functional as F
 def singularValues(kernel,input_shape):
     transforms = np.fft.fft2(kernel,input_shape,axes=(0,1))
     return np.linalg.svd(transforms,compute_uv=False)
 
 #def pytorchSingularValues(kernel,input_shape):
+# def pad_circular_nd(x: torch.Tensor, pad: int, dim) -> torch.Tensor:
+#     """
+#     :param x: shape [H, W]
+#     :param pad: int >= 0
+#     :param dim: the dimension over which the tensors are padded
+#     :return:
+#     """
+#     if isinstance(dim, int):
+#         dim = [dim]
 
+#     for d in dim:
+#         if d >= len(x.shape):
+#             raise IndexError(f"dim {d} out of range")
+
+#         idx = tuple(slice(0, None if s != d else pad, 1) for s in range(len(x.shape)))
+#         x = torch.cat([x, x[idx]], dim=d)
+
+#         idx = tuple(slice(None if s != d else -2 * pad, None if s != d else -pad, 1) for s in range(len(x.shape)))
+#         x = torch.cat([x[idx], x], dim=d)
+#         pass
+#     #print(x.shape)
+#     return x
+
+def flip(x, dim):
+    indices = [slice(None)] * x.dim()
+    indices[dim] = torch.arange(x.size(dim) - 1, -1, -1,
+                                dtype=torch.long, device=x.device)
+    return x[tuple(indices)]
 
 def batchwise_l2normalize(x):
     return x/x.pow(2).sum(-1).sum(-1).sum(-1).sqrt()[:,None,None,None]
@@ -42,8 +69,10 @@ class SN(nn.Module):
         zeros_v_and_mby = self.module(zeros_u_and_mbx)
         bias,v_, mby = torch.split(zeros_v_and_mby,[1,1,bs])
         v = v_-bias
-        self._s = s = v.norm()#torch.abs((self._u*v).sum())
-        self._u = (v/v.norm()).detach()
+        W_T = flip(flip(self.module.weight.permute(1,0,2,3),2),3) # Transpose channels, flip filter
+        u = F.conv2d(v,W_T,padding=1)
+        self._s = s = torch.sqrt((self._u*u).sum())
+        self._u = (u/u.norm()).detach()
         return mby/torch.max(s,torch.tensor(1.).to(x.device))
 
     def log_data(self,logger,step,name=None):

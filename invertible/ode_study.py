@@ -8,7 +8,7 @@ from iresnet import iResnet,iResnetLarge,iResnetLargeV2
 from oil.tuning.study import Study, train_trial
 # from oil.tuning.configGenerator import uniform,logUniform
 
-log_dir_base = os.path.expanduser('~/tb-experiments/iresnet_sigma_norm')
+log_dir_base = os.path.expanduser('~/tb-experiments/iresnet_WTW_wibn')
 cfg_spec = {
     'dataset': [CIFAR10],
     'network': iResnet,
@@ -22,5 +22,5 @@ cfg_spec = {
 #'log_dir':lambda cfg:f'{log_dir_base}/{cfg['dataset']}/{cfg['network']}/s{cfg['net_config']['sigma']}'
 #ODEResnet,RNNResnet,,SplitODEResnet,SmallResnet,BezierRNNSplit,BezierODE,BezierRNN
 do_trial = simpleClassifierTrial(strict=True)
-ode_study = Study(do_trial,cfg_spec,study_name='iresnet_sigma_')
+ode_study = Study(do_trial,cfg_spec,study_name='iresnet_circ')
 ode_study.run()
