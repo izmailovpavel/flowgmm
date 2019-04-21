@@ -27,7 +27,7 @@ class Flow(Trainer):
             z = model.get_all_z_squashed(x)
             
             #
-            l2 = .5*(z**2).sum()/len(z)
+            l2 = .5*(z**2).sum()/len(z) + .5*np.log(2*np.pi)
             #l2.backward(retain_graph=True)
             lndet = model.logdet().sum()/len(z)
             
@@ -42,13 +42,15 @@ class Flow(Trainer):
         # try: metrics['FID'],metrics['IS'] = FID_and_IS(self.as_dataloader(),self.dataloaders['dev'])
         # except KeyError: pass
         # self.logger.add_scalars('metrics', metrics, step)
-        with Eval(self.model), torch.no_grad():
-            fake_images = self.model.sample(32).cpu().data
-            for i,p in enumerate(self.model.parameters()):
-                if (i>=5) and (i<8): 
-                    print(f"Some weight: {p.reshape(-1)[-1]}")
-        img_grid = vutils.make_grid(fake_images, normalize=True)
-        self.logger.add_image('samples', img_grid, step)
+        if hasattr(self.model,'sample'):
+            with Eval(self.model), torch.no_grad():
+                self.model(minibatch[0])
+                fake_images = self.model.sample(32).cpu().data
+                for i,p in enumerate(self.model.parameters()):
+                    if (i>=5) and (i<8): 
+                        print(f"Some weight: {p.reshape(-1)[-1]}")
+            img_grid = vutils.make_grid(fake_images, normalize=True)
+            self.logger.add_image('samples', img_grid, step)
         super().logStuff(step,minibatch)
 
     def metrics(self,loader):
@@ -70,7 +72,7 @@ import collections
 def simpleFlowTrial(strict=False):
     def makeTrainer(config):
         cfg = {
-            'dataset': CIFAR10,'network':iResnet,'net_config': {'sigma':.5,'k':32},
+            'dataset': CIFAR10,'network':iResnet,
             'loader_config': {'amnt_dev':5000,'lab_BS':64, 'pin_memory':True,'num_workers':2},
             'opt_config':{'lr':.0003,},# 'momentum':.9, 'weight_decay':1e-4,'nesterov':True},
             'num_epochs':100,'trainer_config':{},
@@ -94,4 +96,4 @@ def simpleFlowTrial(strict=False):
 
 if __name__=='__main__':
     Trial = simpleFlowTrial(strict=True)
-    Trial({'num_epochs':100})
+    Trial({'num_epochs':100,'net_config': {'sigma':.5,'k':32},})
