@@ -19,8 +19,109 @@ NO_LABEL = -1
 
 
 def make_ssl_data_loaders(
+    data_path,
+    label_path,
+    labeled_batch_size,
+    unlabeled_batch_size,
+    num_workers, 
+    transform_train, 
+    transform_test, 
+    use_validation=True, 
+    dataset="cifar10", 
+    *args, 
+    **kwargs):
+    if dataset.lower() == "cifar10":
+        return make_ssl_cifar_data_loaders(data_path, label_path, 
+                labeled_batch_size, unlabeled_batch_size, num_workers, 
+                transform_train, transform_test, use_validation, 
+                *args, **kwargs)
+    elif dataset.lower() == "mnist":
+        return make_ssl_mnist_data_loaders(data_path, label_path, 
+                labeled_batch_size, unlabeled_batch_size, num_workers, 
+                transform_train, transform_test, use_validation, 
+                *args, **kwargs)
+    else:
+        raise ValueError("Unknown dataset")
+
+def make_ssl_mnist_data_loaders(
+    data_path,
+    label_path,
+    labeled_batch_size,
+    unlabeled_batch_size,
+    num_workers, 
+    transform_train, 
+    transform_test, 
+    use_validation=True, 
+    ):
+    
+    ds = torchvision.datasets.MNIST
+    train_set = ds(data_path, transform=transform_train, train=True, download=True)
+
+    labels = np.load(label_path)
+    labeled_idxs, unlabeled_idxs = labels['labeled_indices'], labels['unlabeled_indices']
+    num_classes = 10
+
+    if use_validation:
+        val_size = 5000
+        val_idxs = unlabeled_idxs[:val_size]
+        unlabeled_idxs = unlabeled_idxs[val_size:]
+        train_idxs = np.hstack([unlabeled_idxs, labeled_idxs])
+
+        print("Using train (" + str(len(train_set.train_data) - val_size) + 
+              ") + validation (" + str(val_size) + ")")
+        train_set.train_data = torch.vstack([train_set.train_data[unlabeled_idxs], 
+                                          train_set.train_data[labeled_idxs]])
+        train_set.train_labels = torch.hstack([train_set.train_labels[unlabeled_idxs], 
+                                          train_set.train_labels[labeled_idxs]])
+        idxs = np.arange(len(train_idxs))
+        unlabeled_idxs = idxs[:len(unlabeled_idxs)]
+        labeled_idxs = idxs[len(unlabeled_idxs):]
+
+        test_set = ds(data_path, train=True, download=True, transform=transform_test)
+        test_set.train = False
+        test_set.test_data = test_set.train_data[val_idxs]
+        test_set.test_labels = test_set.train_labels[val_idxs]
+        delattr(test_set, 'train_data')
+        delattr(test_set, 'train_labels')
+    
+    else:
+        test_set = ds(data_path, train=False, download=True, transform=transform_test)
+    
+    #relabeling train
+    num_train = len(train_set.train_data)
+
+    # In case using validation
+    
+    assert num_train == len(labeled_idxs) + len(unlabeled_idxs)
+    train_set.train_labels[unlabeled_idxs] = NO_LABEL
+
+    print("Num classes", num_classes)
+    print("Labeled data: ", len(labeled_idxs))
+    print("Unlabeled data:", len(unlabeled_idxs))
+
+    batch_sampler = LabeledUnlabeledBatchSampler(
+            labeled_idxs, unlabeled_idxs, labeled_batch_size, unlabeled_batch_size)
+
+    train_loader = torch.utils.data.DataLoader(
+            train_set,
+            batch_sampler=batch_sampler,
+            num_workers=num_workers,
+            pin_memory=True)
+
+    test_loader = torch.utils.data.DataLoader(
+            test_set,
+            batch_size=labeled_batch_size+unlabeled_batch_size,
+            shuffle=False,
+            num_workers=2*num_workers,  # Needs images twice as fast
+            pin_memory=True,
+            drop_last=False)
+
+    return train_loader, test_loader, num_classes
+
+
+def make_ssl_cifar_data_loaders(
         data_path,
-		label_path,
+        label_path,
         labeled_batch_size,
         unlabeled_batch_size,
         num_workers, 
