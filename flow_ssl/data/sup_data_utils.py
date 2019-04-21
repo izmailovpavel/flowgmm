@@ -4,7 +4,6 @@ import os
 
 
 def make_sup_data_loaders(
-        dataset, 
         path, 
         batch_size, 
         num_workers, 
@@ -12,10 +11,12 @@ def make_sup_data_loaders(
         transform_test, 
         use_validation=True, 
         val_size=5000, 
-        shuffle_train=True):
+        shuffle_train=True,
+        dataset="cifar10", 
+        ):
 
     
-    ds = getattr(torchvision.datasets, dataset)
+    ds = getattr(torchvision.datasets, dataset.upper())
 
     #PAVEL: need consistency for supervised and semi-supervised ds here
     #path = os.path.join(path, dataset.lower())
