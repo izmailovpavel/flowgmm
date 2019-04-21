@@ -62,7 +62,7 @@ def get_means(means_type, num_means=10, shape=(3, 32, 32), r=1, trainloader=None
     return means
 
 
-def sample(net, prior, batch_size, cls, device):
+def sample(net, prior, batch_size, cls, device, sample_shape):
     """Sample from RealNVP model.
 
     Args:
@@ -73,7 +73,7 @@ def sample(net, prior, batch_size, cls, device):
     #z = torch.randn((batch_size, 3, 32, 32), dtype=torch.float32, device=device)
     with torch.no_grad():
         z = prior.sample((batch_size,), gaussian_id=cls)
-        z = z.reshape((batch_size, 3, 32, 32))
+        z = z.reshape((batch_size, *sample_shape))
         x, _ = net(z, reverse=True)
         x = torch.sigmoid(x)
 
