@@ -27,8 +27,7 @@ class SemiFlow(Trainer):
         unlab_loss = self.unlabLoss(x_unlab)*float(self.hypers['unlab_weight'])
         return lab_loss + unlab_loss
 
-    def logStuff(self, i, minibatch=None):
-        step = i+1 + (self.epoch+1)*len(self.dataloaders['train']) 
+    def logStuff(self, step, minibatch=None):
         bpd_func = lambda mb: (self.unlabLoss(mb).cpu().data.numpy() + np.log(256))/np.log(2)
         acc_func = lambda mb: self.model(mb[0]).max(1)[1].type_as(mb[1]).eq(mb[1]).cpu().data.numpy().mean()
         metrics = {}
