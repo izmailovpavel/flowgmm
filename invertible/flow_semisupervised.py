@@ -38,7 +38,7 @@ class SemiFlow(Trainer):
             metrics['Train_acc'] = self.evalAverageMetrics(self.dataloaders['Train'],acc_func)
             metrics['Dev_acc'] = self.evalAverageMetrics(self.dataloaders['dev'],acc_func)
             if minibatch:
-                metrics.update({'Unlab_loss(mb)':self.unlabLoss(minibatch[1]).cpu().item()})
+                metrics['Unlab_loss(mb)']=self.unlabLoss(minibatch[1]).cpu().data.numpy()
         self.logger.add_scalars('metrics',metrics,step)
         super().logStuff(i, minibatch)
 
@@ -83,22 +83,3 @@ def semiFlowTrial(strict=False):
         lr_sched = cosLr(cfg['num_epochs'])
         return SemiFlow(fullCNN,dataloaders,opt_constr,lr_sched,**cfg['trainer_config'])
     return train_trial(makeTrainer,strict)
-
-if __name__=='__main__':
-    # Trial = SemiFlowTrial(strict=True)
-    # Trial({'num_epochs':100,'net_config': {'sigma':.5,'k':32},})
-    log_dir_base = os.path.expanduser('~/tb-experiments/elu_semi_flow')
-    cfg_spec = {
-        'dataset': [CIFAR10],
-        'network': [iEluNetMultiScaleLarger],
-        'net_config': {'k':32},
-        'opt_config':{'lr':[.01,.003,.001,.0003]},
-        'num_epochs':5, 
-        'trainer_config':{'log_dir':lambda cfg:log_dir_base+\
-            '/{}/{}'.format(cfg['dataset'],cfg['network']),'unlab_weight':[1.,10,.1]}
-        }
-    #'log_dir':lambda cfg:f'{log_dir_base}/{cfg['dataset']}/{cfg['network']}/s{cfg['net_config']['sigma']}'
-    #ODEResnet,RNNResnet,,SplitODEResnet,SmallResnet,BezierRNNSplit,BezierODE,BezierRNN
-    do_trial = semiFlowTrial(strict=True)
-    ode_study = Study(do_trial,cfg_spec,study_name='semi_flow_hypers')
-    ode_study.run(10)
