@@ -62,6 +62,7 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, wr
                                      acc=acc_meter.avg)
             progress_bar.update(x.size(0))
 
+    writer.add_image("data/x", x[:10])
     writer.add_scalar("train/loss", loss_meter.avg, epoch)
     writer.add_scalar("train/loss_unsup", loss_unsup_meter.avg, epoch)
     writer.add_scalar("train/loss_nll", loss_nll_meter.avg, epoch)
@@ -71,6 +72,8 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, wr
 
 parser = argparse.ArgumentParser(description='RealNVP on CIFAR-10')
 
+parser.add_argument('--dataset', type=str, default="CIFAR10", required=True, metavar='DATA',
+                help='Dataset name (default: CIFAR10)')
 parser.add_argument('--data_path', type=str, default=None, required=True, metavar='PATH',
                 help='path to datasets location (default: None)')
 parser.add_argument('--logdir', type=str, default=None, required=True, metavar='PATH',
@@ -118,15 +121,19 @@ device = 'cuda' if torch.cuda.is_available() and len(args.gpu_ids) > 0 else 'cpu
 start_epoch = 0
 
 # Note: No normalization applied, since RealNVP expects inputs in (0, 1).
-transform_train = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor()
-])
-
-transform_test = transforms.Compose([
-    transforms.ToTensor()
-])
+if args.dataset.lower() == "mnist":
+    img_shape = (1, 28, 28)
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(28, padding=4),
+        transforms.ToTensor()
+    ])
+else:
+    img_shape = (3, 32, 32)
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor()
+    ])
 
 trainloader, testloader, _ = make_sup_data_loaders(
         "CIFAR10", 
@@ -136,11 +143,12 @@ trainloader, testloader, _ = make_sup_data_loaders(
         transform_train, 
         transform_test, 
         use_validation=False, 
-        shuffle_train=True)
+        shuffle_train=True,
+        dataset=args.dataset.lower())
 
 # Model
 print('Building model...')
-net = RealNVP(num_scales=2, in_channels=3, mid_channels=64, num_blocks=8)
+net = RealNVP(num_scales=2, in_channels=img_shape[0], mid_channels=64, num_blocks=8)
 net = net.to(device)
 if device == 'cuda':
     net = torch.nn.DataParallel(net, args.gpu_ids)
@@ -153,11 +161,11 @@ if args.resume is not None:
     start_epoch = checkpoint['epoch']
 
 #PAVEL: we need to find a good way of placing the means
-D = (32 * 32 * 3)
 r = args.means_r 
 cov_std = torch.ones((10)) * args.cov_std
 cov_std = cov_std.to(device)
-means = utils.get_means(args.means, r=args.means_r, trainloader=trainloader, device=device)
+means = utils.get_means(args.means, r=args.means_r, trainloader=trainloader, 
+                        shape=img_shape, device=device)
 
 if args.resume is not None:
     print("Using the means for ckpt")
@@ -212,7 +220,7 @@ for epoch in range(start_epoch, args.num_epochs):
         torch.save(state, os.path.join(args.ckptdir, str(epoch)+'.pt'))
 
     # Save samples and data
-    writer.add_image("means", means.reshape((10, 3, 32, 32)))
+    writer.add_image("means", means.reshape((10, *img_shape)))
     images = []
     for i in range(10):
         images_cls = utils.sample(net, loss_fn.prior, args.num_samples // 10, cls=i, device=device)

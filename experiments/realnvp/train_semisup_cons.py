@@ -23,75 +23,101 @@ from flow_ssl import FlowLoss
 from flow_ssl.distributions import SSLGaussMixture
 from flow_ssl.data import make_ssl_data_loaders
 from flow_ssl.data import NO_LABEL
+from flow_ssl.data import TransformTwice
+
+
+#PAVEL: move to utils later
+def linear_rampup(final_value, epoch, num_epochs, start_epoch=0):
+    t = (epoch - start_epoch + 1) / num_epochs
+    if t > 1:
+        t = 1.
+    return t * final_value
 
 
 #PAVEL: think of a good way to reuse the training code for (semi/un/)supervised
 def train(epoch, net, trainloader, device, optimizer, loss_fn, 
-          label_weight, jaclogdet_reg, max_grad_norm, 
-          writer, use_unlab=True):
+          label_weight, max_grad_norm, consistency_weight,
+          writer, use_unlab=True, 
+          ):
     print('\nEpoch: %d' % epoch)
     net.train()
     loss_meter = utils.AverageMeter()
     loss_unsup_meter = utils.AverageMeter()
     loss_nll_meter = utils.AverageMeter()
+    loss_consistency_meter = utils.AverageMeter()
     jaclogdet_meter = utils.AverageMeter()
     acc_meter = utils.AverageMeter()
     with tqdm(total=trainloader.batch_sampler.num_labeled) as progress_bar:
-        for x, y in trainloader:
+        for (x1, x2), y in trainloader:
 
-            x = x.to(device)
+            x1 = x1.to(device)
             y = y.to(device)
 
             labeled_mask = (y != NO_LABEL)
 
             optimizer.zero_grad()
-            z, sldj = net(x, reverse=False)
 
-            z_labeled = z.reshape((len(z), -1))
+            with torch.no_grad():
+                x2 = x2.to(device)
+                z2, _ = net(x2, reverse=False)
+                z2 = z2.detach()
+                pred2 = loss_fn.prior.classify(z2.reshape((len(z2), -1)))
+
+            z1, sldj = net(x1, reverse=False)
+
+            z_labeled = z1.reshape((len(z1), -1))
             z_labeled = z_labeled[labeled_mask]
             y_labeled = y[labeled_mask]
 
-            logits = loss_fn.prior.class_logits(z_labeled)
-            loss_nll = F.cross_entropy(logits, y_labeled)
+            logits_labeled = loss_fn.prior.class_logits(z_labeled)
+            loss_nll = F.cross_entropy(logits_labeled, y_labeled)
 
             if use_unlab:
-                loss_unsup = loss_fn(z, sldj=sldj)
+                loss_unsup = loss_fn(z1, sldj=sldj)
                 loss = loss_nll * label_weight + loss_unsup
             else:
                 loss_unsup = torch.tensor([0.])
                 loss = loss_nll
 
-            loss += jaclogdet_reg * sldj.mean()
+            # consistency loss
+            loss_consistency = loss_fn(z1, sldj=sldj, y=pred2)
+            loss = loss + loss_consistency * consistency_weight
 
             loss.backward()
             utils.clip_grad_norm(optimizer, max_grad_norm)
             optimizer.step()
 
-            preds = torch.argmax(logits, dim=1)
+            preds = torch.argmax(logits_labeled, dim=1)
             acc = (preds == y_labeled).float().mean().item()
 
-            acc_meter.update(acc, x.size(0))
-            loss_meter.update(loss.item(), x.size(0))
-            loss_unsup_meter.update(loss_unsup.item(), x.size(0))
-            loss_nll_meter.update(loss_nll.item(), x.size(0))
-            jaclogdet_meter.update(sldj.mean().item(), x.size(0))
+            acc_meter.update(acc, x1.size(0))
+            loss_meter.update(loss.item(), x1.size(0))
+            loss_unsup_meter.update(loss_unsup.item(), x1.size(0))
+            loss_nll_meter.update(loss_nll.item(), x1.size(0))
+            jaclogdet_meter.update(sldj.mean().item(), x1.size(0))
+            loss_consistency_meter.update(loss_consistency.item(), x1.size(0))
 
             progress_bar.set_postfix(loss=loss_meter.avg,
-                                     bpd=utils.bits_per_dim(x, loss_unsup_meter.avg),
+                                     bpd=utils.bits_per_dim(x1, loss_unsup_meter.avg),
                                      acc=acc_meter.avg)
             progress_bar.update(y_labeled.size(0))
+
+    writer.add_image("data/x1", x1[:10])
+    writer.add_image("data/x2", x2[:10])
 
     writer.add_scalar("train/loss", loss_meter.avg, epoch)
     writer.add_scalar("train/loss_unsup", loss_unsup_meter.avg, epoch)
     writer.add_scalar("train/loss_nll", loss_nll_meter.avg, epoch)
     writer.add_scalar("train/jaclogdet", jaclogdet_meter.avg, epoch)
     writer.add_scalar("train/acc", acc_meter.avg, epoch)
-    writer.add_scalar("train/bpd", utils.bits_per_dim(x, loss_unsup_meter.avg), epoch)
-
+    writer.add_scalar("train/bpd", utils.bits_per_dim(x1, loss_unsup_meter.avg), epoch)
+    writer.add_scalar("train/loss_consistency", loss_consistency_meter.avg, epoch)
 
 
 parser = argparse.ArgumentParser(description='RealNVP on CIFAR-10')
 
+parser.add_argument('--dataset', type=str, default="CIFAR10", required=True, metavar='DATA',
+                help='Dataset name (default: CIFAR10)')
 parser.add_argument('--data_path', type=str, default=None, required=True, metavar='PATH',
                 help='path to datasets location (default: None)')
 parser.add_argument('--label_path', type=str, default=None, required=True, metavar='PATH',
@@ -129,9 +155,10 @@ parser.add_argument('--schedule', choices=['wilson', 'no'], default='no')
 parser.add_argument('--label_weight', default=1., type=float,
                     help='weight of the cross-entropy loss term')
 parser.add_argument('--supervised_only', action='store_true', help='Train on labeled data only')
-parser.add_argument('--jaclogdet_reg', default=0., type=float,
-                    help='jacobian log-determinant regularizer weight')
+parser.add_argument('--consistency_weight', default=100., type=float,
+                    help='weight of the consistency loss term')
 parser.add_argument('--eval_freq', default=1, type=int, help='Number of epochs between evaluation')
+parser.add_argument('--consistency_rampup', default=1, type=int, help='Number of epochs for consistency loss rampup')
 
 
 args = parser.parse_args()
@@ -147,11 +174,22 @@ device = 'cuda' if torch.cuda.is_available() and len(args.gpu_ids) > 0 else 'cpu
 start_epoch = 0
 
 # Note: No normalization applied, since RealNVP expects inputs in (0, 1).
-transform_train = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor()
-])
+
+if args.dataset.lower() == "mnist":
+    img_shape = (1, 28, 28)
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(28, padding=4),
+        transforms.ToTensor()
+    ])
+else:
+    img_shape = (3, 32, 32)
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor()
+    ])
+
+transform_train = TransformTwice(transform_train)
 
 transform_test = transforms.Compose([
     transforms.ToTensor()
@@ -165,11 +203,12 @@ trainloader, testloader, _ = make_ssl_data_loaders(
         args.num_workers, 
         transform_train, 
         transform_test, 
-        use_validation=False)
+        use_validation=False,
+        dataset=args.dataset.lower())
 
 # Model
 print('Building model...')
-net = RealNVP(num_scales=2, in_channels=3, mid_channels=64, num_blocks=8)
+net = RealNVP(num_scales=2, in_channels=img_shape[0], mid_channels=64, num_blocks=8)
 net = net.to(device)
 if device == 'cuda':
     net = torch.nn.DataParallel(net, args.gpu_ids)
@@ -182,11 +221,11 @@ if args.resume is not None:
     start_epoch = checkpoint['epoch']
 
 #PAVEL: we need to find a good way of placing the means
-D = (32 * 32 * 3)
 r = args.means_r 
 cov_std = torch.ones((10)) * args.cov_std
 cov_std = cov_std.to(device)
-means = utils.get_means(args.means, r=args.means_r, trainloader=trainloader, device=device)
+means = utils.get_means(args.means, r=args.means_r, trainloader=trainloader, 
+                        shape=img_shape, device=device)
 
 if args.resume is not None:
     print("Using the means for ckpt")
@@ -202,7 +241,7 @@ if args.means_trainable:
     print("Using learnable means")
     means = torch.tensor(means_np, requires_grad=True)
 
-writer.add_image("means", means.reshape((10, 3, 32, 32)))
+writer.add_image("means", means.reshape((10, *img_shape)))
 prior = SSLGaussMixture(means, device=device)
 loss_fn = FlowLoss(prior)
 
@@ -223,12 +262,16 @@ for epoch in range(start_epoch, args.num_epochs):
         utils.adjust_learning_rate(optimizer, lr)	
     else:
         lr = args.lr
-
+    
+    cons_weight = linear_rampup(args.consistency_weight, epoch, args.consistency_rampup, start_epoch)
+    
     writer.add_scalar("hypers/learning_rate", lr, epoch)
+    writer.add_scalar("hypers/consistency_weight", cons_weight, epoch)
 
     train(epoch, net, trainloader, device, optimizer, loss_fn, 
-          args.label_weight, args.jaclogdet_reg, args.max_grad_norm, 
-          writer, use_unlab=not args.supervised_only)
+          args.label_weight, args.max_grad_norm, cons_weight,
+          writer, use_unlab=not args.supervised_only, 
+         )
 
     # Save checkpoint
     if (epoch % args.save_freq == 0):
@@ -243,16 +286,17 @@ for epoch in range(start_epoch, args.num_epochs):
 
     # Save samples and data
     if epoch % args.eval_freq == 0:
-    	utils.test_classifier(epoch, net, testloader, device, loss_fn, writer)
-    	writer.add_image("means", means.reshape((10, 3, 32, 32)))
-    	images = []
-    	for i in range(10):
-    	    images_cls = utils.sample(net, loss_fn.prior, args.num_samples // 10, cls=i, device=device)
-    	    images.append(images_cls)
-    	    writer.add_image("samples/class_"+str(i), images_cls)
-    	images = torch.cat(images)
-    	os.makedirs(os.path.join(args.ckptdir, 'samples'), exist_ok=True)
-    	images_concat = torchvision.utils.make_grid(images, nrow=args.num_samples //  10 , padding=2, pad_value=255)
-    	os.makedirs(args.ckptdir, exist_ok=True)
-    	torchvision.utils.save_image(images_concat, 
-    	                            os.path.join(args.ckptdir, 'samples/epoch_{}.png'.format(epoch)))
+        utils.test_classifier(epoch, net, testloader, device, loss_fn, writer)
+        writer.add_image("means", means.reshape((10, *img_shape)))
+        images = []
+        for i in range(10):
+            images_cls = utils.sample(net, loss_fn.prior, args.num_samples // 10,
+                                      cls=i, device=device, sample_shape=img_shape)
+            images.append(images_cls)
+            writer.add_image("samples/class_"+str(i), images_cls)
+        images = torch.cat(images)
+        os.makedirs(os.path.join(args.ckptdir, 'samples'), exist_ok=True)
+        images_concat = torchvision.utils.make_grid(images, nrow=args.num_samples //  10 , padding=2, pad_value=255)
+        os.makedirs(args.ckptdir, exist_ok=True)
+        torchvision.utils.save_image(images_concat, 
+                                    os.path.join(args.ckptdir, 'samples/epoch_{}.png'.format(epoch)))
