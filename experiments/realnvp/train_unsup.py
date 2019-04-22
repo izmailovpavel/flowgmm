@@ -168,7 +168,7 @@ param_groups = utils.get_param_groups(net, args.weight_decay, norm_suffix='weigh
 optimizer = optim.Adam(param_groups, lr=args.lr)
 
 for epoch in range(start_epoch, start_epoch + args.num_epochs):
-    train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm, writer)
+    #train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm, writer)
     test(epoch, net, testloader, device, loss_fn, args.num_samples, writer)
 
     # Save checkpoint

@@ -228,7 +228,8 @@ for epoch in range(start_epoch, args.num_epochs):
         writer.add_image("means", means.reshape((10, *img_shape)))
         images = []
         for i in range(10):
-            images_cls = utils.sample(net, loss_fn.prior, args.num_samples // 10, cls=i, device=device)
+            images_cls = utils.sample(net, loss_fn.prior, args.num_samples // 10,
+                                      cls=i, device=device, sample_shape=img_shape)
             images.append(images_cls)
             writer.add_image("samples/class_"+str(i), images_cls)
         images = torch.cat(images)
