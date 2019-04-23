@@ -12,28 +12,28 @@ def singularValues(kernel,input_shape):
     return np.linalg.svd(transforms,compute_uv=False)
 
 #def pytorchSingularValues(kernel,input_shape):
-# def pad_circular_nd(x: torch.Tensor, pad: int, dim) -> torch.Tensor:
-#     """
-#     :param x: shape [H, W]
-#     :param pad: int >= 0
-#     :param dim: the dimension over which the tensors are padded
-#     :return:
-#     """
-#     if isinstance(dim, int):
-#         dim = [dim]
+def pad_circular_nd(x: torch.Tensor, pad: int, dim) -> torch.Tensor:
+    """
+    :param x: shape [H, W]
+    :param pad: int >= 0
+    :param dim: the dimension over which the tensors are padded
+    :return:
+    """
+    if isinstance(dim, int):
+        dim = [dim]
 
-#     for d in dim:
-#         if d >= len(x.shape):
-#             raise IndexError(f"dim {d} out of range")
+    for d in dim:
+        if d >= len(x.shape):
+            raise IndexError(f"dim {d} out of range")
 
-#         idx = tuple(slice(0, None if s != d else pad, 1) for s in range(len(x.shape)))
-#         x = torch.cat([x, x[idx]], dim=d)
+        idx = tuple(slice(0, None if s != d else pad, 1) for s in range(len(x.shape)))
+        x = torch.cat([x, x[idx]], dim=d)
 
-#         idx = tuple(slice(None if s != d else -2 * pad, None if s != d else -pad, 1) for s in range(len(x.shape)))
-#         x = torch.cat([x[idx], x], dim=d)
-#         pass
-#     #print(x.shape)
-#     return x
+        idx = tuple(slice(None if s != d else -2 * pad, None if s != d else -pad, 1) for s in range(len(x.shape)))
+        x = torch.cat([x[idx], x], dim=d)
+        pass
+    #print(x.shape)
+    return x
 
 def flip(x, dim):
     indices = [slice(None)] * x.dim()
