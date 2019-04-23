@@ -39,7 +39,7 @@ class SemiFlow(Trainer):
             if minibatch:
                 metrics['Unlab_loss(mb)']=self.unlabLoss(minibatch[1]).cpu().data.numpy()
         self.logger.add_scalars('metrics',metrics,step)
-        super().logStuff(i, minibatch)
+        super().logStuff(step, minibatch)
 
 
 from torch.utils.data import DataLoader
