@@ -15,3 +15,6 @@ do
         mv $img ${labeldir}/${i}.png
     done
 done
+#Pillow can not load these two files for some reason
+rm $IMGDIR/notMNIST_small/A/1288.png
+rm $IMGDIR/notMNIST_small/F/417.png
