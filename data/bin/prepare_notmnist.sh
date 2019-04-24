@@ -5,4 +5,4 @@ IMGDIR="$DIR/../images/notmnist"
 mkdir -p $IMGDIR
 curl -o $IMGDIR/notMNIST_small.tar.gz http://yaroslavvb.com/upload/notMNIST/notMNIST_small.tar.gz
 gunzip $IMGDIR/notMNIST_small.tar.gz
-tar -xf $IMGDIR/notMNIST_small.tar
+tar -xf $IMGDIR/notMNIST_small.tar -C $IMGDIR

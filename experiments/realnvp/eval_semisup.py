@@ -88,8 +88,10 @@ parser.add_argument('--batch_size', default=64, type=int, help='Batch size')
 parser.add_argument('--gpu_ids', default='[0]', type=eval, help='IDs of GPUs to use')
 parser.add_argument('--num_samples', default=50, type=int, help='Number of samples at test time')
 parser.add_argument('--num_workers', default=8, type=int, help='Number of data loader threads')
-parser.add_argument('--ckpt', type=str, default=None, required=False, metavar='PATH',
+parser.add_argument('--ckpt', type=str, default=None, required=True, metavar='PATH',
                 help='path to checkpoint to resume from (default: None)')
+parser.add_argument('--filename', type=str, default="preds.npz", required=False, metavar='PATH',
+                help='filename to save preds')
 
 # PAVEL
 parser.add_argument('--cov_std', default=1., type=float,
@@ -135,7 +137,7 @@ print('Resuming from checkpoint at', args.ckpt)
 checkpoint = torch.load(args.ckpt)
 net.load_state_dict(checkpoint['net'])
 pred_path = "/".join(args.ckpt.split("/")[:-1])
-pred_path = os.path.join(pred_path, "preds.npz")
+pred_path = os.path.join(pred_path, filename)
 print(pred_path)
 
 #PAVEL: we need to find a good way of placing the means

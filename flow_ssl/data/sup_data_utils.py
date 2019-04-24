@@ -16,6 +16,17 @@ def make_sup_data_loaders(
         ):
 
     
+    if dataset == "notmnist":
+        testset = torchvision.datasets.ImageFolder(root=path, transform=transform_test)
+        test_loader = torch.utils.data.DataLoader(
+                    test_set,
+                    batch_size=batch_size,
+                    shuffle=False,
+                    num_workers=num_workers,
+                    pin_memory=True
+                )
+        return None, test_loader, 10
+
     ds = getattr(torchvision.datasets, dataset.upper())
 
     #PAVEL: need consistency for supervised and semi-supervised ds here
@@ -54,3 +65,5 @@ def make_sup_data_loaders(
             )
 
     return train_loader, test_loader, num_classes
+
+
