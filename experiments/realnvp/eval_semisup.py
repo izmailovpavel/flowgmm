@@ -105,13 +105,19 @@ start_epoch = 0
 
 # Note: No normalization applied, since RealNVP expects inputs in (0, 1).
 
+transform_test = []
 if args.dataset.lower() == "mnist":
     img_shape = (1, 28, 28)
-
-else:
+if args.dataset.lower() == "notmnist":
+    img_shape = (1, 28, 28)
+    transform_test = [transforms.Grayscale()]
+elif args.dataset.lower() == "cifar10":
     img_shape = (3, 32, 32)
+else:
+    raise ValueError("Unknown dataset")
 
 transform_test = transforms.Compose([
+    *transform_test,
     transforms.ToTensor()
 ])
 
@@ -137,7 +143,7 @@ print('Resuming from checkpoint at', args.ckpt)
 checkpoint = torch.load(args.ckpt)
 net.load_state_dict(checkpoint['net'])
 pred_path = "/".join(args.ckpt.split("/")[:-1])
-pred_path = os.path.join(pred_path, filename)
+pred_path = os.path.join(pred_path, args.filename)
 print(pred_path)
 
 #PAVEL: we need to find a good way of placing the means

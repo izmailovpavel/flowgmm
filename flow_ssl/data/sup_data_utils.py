@@ -17,7 +17,7 @@ def make_sup_data_loaders(
 
     
     if dataset == "notmnist":
-        testset = torchvision.datasets.ImageFolder(root=path, transform=transform_test)
+        test_set = torchvision.datasets.ImageFolder(root=path, transform=transform_test)
         test_loader = torch.utils.data.DataLoader(
                     test_set,
                     batch_size=batch_size,
