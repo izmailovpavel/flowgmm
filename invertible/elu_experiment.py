@@ -3,15 +3,15 @@ from oil.datasetup.datasets import CIFAR10,CIFAR100
 from oil.model_trainers.classifier import Classifier,simpleClassifierTrial
 # from resnets import SplitODEResnet,ODEResnet,LongResnet,RNNBottle
 # from resnets import SmallResnet,RNNResnet
-from elu_flow import iEluNet
+from iEluNetwork import iEluNet
 from oil.tuning.study import Study, train_trial
 # from oil.tuning.configGenerator import uniform,logUniform
 
-log_dir_base = os.path.expanduser('~/tb-experiments/ielu50_drop_swap')
+log_dir_base = os.path.expanduser('~/tb-experiments/ielu50_iSLReLU')
 cfg_spec = {
     'dataset': CIFAR10,
     'network': iEluNet,
-    'net_config': {'k':128},
+    'net_config': {'k':32},
     'loader_config': {'amnt_dev':5000,'lab_BS':64},
     'opt_config':{'lr':.1},
     'num_epochs':50, 

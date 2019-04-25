@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from oil.utils.utils import Expression,export,Named
+import torch.nn.functional as F
 #https://github.com/rtqichen/ffjord/blob/master/lib/layers/squeeze.py
 
 
@@ -48,6 +49,39 @@ def squeeze(input, downscale_factor=2):
 
     output = input_view.permute(0, 1, 3, 5, 2, 4).contiguous()
     return output.view(batch_size, out_channels, out_height, out_width)
+
+def except_every4(a):
+    bs,c,h,w = a.shape
+    assert not c%4, "channels not divisible by 4"
+    without = (a.reshape(bs,c//4,4,h,w)[:,:,1:])
+    removed = without.reshape(bs,c//4 * 3,h,w)
+    return removed
+
+def add_zeros_every4(a):
+    bs,c,h,w = a.shape
+    assert not c%3, "Channels not divisible by 3"
+    with_zeros_extended = torch.zeros(bs,c//3,4,h,w).to(a.device)
+    with_zeros_extended[:,:,1:] = a.reshape(bs,c//3,3,h,w)
+    return with_zeros_extended.reshape(bs,4*c//3,h,w)
+    
+@export
+class NNdownsample(nn.Module):
+    def forward(self,x):
+        downsampled = F.interpolate(x,scale_factor=1/2)
+        resampled = F.interpolate(downsampled,scale_factor=2)
+        lost_info = squeeze(x-resampled,2)
+        nonzero_info = except_every4(lost_info) # channels 0,3,7,... are all zero
+        return torch.cat((downsampled,nonzero_info),dim=1)
+    def inverse(self,y):
+        c = y.shape[1]
+        downsampled,nonzero_info = torch.split(y,(c//4,3*c//4),dim=1)
+        lost_info = add_zeros_every4(nonzero_info)
+        nn_upsampled = F.interpolate(downsampled,scale_factor=2)
+        full_upsampled = nn_upsampled + unsqueeze(lost_info)
+        return full_upsampled
+    def logdet(self):
+        return 0
+
 
 class padChannels(nn.Module):
     def __init__(self, pad_size):

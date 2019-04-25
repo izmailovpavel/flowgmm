@@ -34,7 +34,10 @@ class iConv2d(nn.Module):
             return self.conv(x)
     # FFT inverse method
     def inverse(self,y):
-        return inverse_fft_conv3x3(y-self.conv.bias[None,:,None,None],self.conv.weight)
+        x = inverse_fft_conv3x3(y-self.conv.bias[None,:,None,None],self.conv.weight)
+        # if torch.isnan(x).any():
+        #     assert False, "Nans encountered in iconv2d"
+        return x
     # GMRES inverse method
     # def inverse(self,y):
     #     self._inverses_evaluated +=1
@@ -85,13 +88,36 @@ class iElu(nn.ELU):
         return super().forward(x)
     def inverse(self,y):
         # y if y>0 else log(1+y)
-        return F.relu(y) - F.relu(-y)*torch.log(1+y)/y
+        x = F.relu(y) - F.relu(-y)*torch.log(1+y)/y
+        #assert not torch.isnan(x).any(), "Nans in iElu"
+        return x
     def logdet(self):
         #logdetJ = \sum_i log J_ii # sum over c,h,w not batch
         return (-F.relu(-self._last_x)).sum(3).sum(2).sum(1) 
 
+class iSLReLU(nn.Module):
+    def __init__(self,slope=.1):
+        self.alpha = (1 - slope)/(1+slope)
+        super().__init__()
+    def forward(self,x):
+        self._last_x = x
+        y = (x+self.alpha*(torch.sqrt(1+x*x)-1))/(1+self.alpha)
+        return y
+    def inverse(self,y):
+        # y if y>0 else log(1+y)
+        a = self.alpha
+        b = (1+a)*y + a
+        x = (torch.sqrt(a**2 + (a*b)**2-a**4) - b)/(a**2-1)
+        #assert not torch.isnan(x).any(), "Nans in iSLReLU"
+        return x
+    def logdet(self):
+        #logdetJ = \sum_i log J_ii # sum over c,h,w not batch
+        x = self._last_x
+        a = self.alpha
+        return (1+a*x/(torch.sqrt(1+x*x))).sum(3).sum(2).sum(1)/(1+a)
+
 def iConvBNelu(ch):
-    return iSequential(iConv2d(ch,ch),iBN(ch),iElu())
+    return iSequential(iConv2d(ch,ch),iBN(ch),iSLReLU())
 
 def passThrough(*layers):
     return iSequential(*[both(layer,I) for layer in layers])
@@ -146,6 +172,15 @@ class iEluNet(nn.Module,metaclass=Named):
         except AttributeError:
             self._device = next(self.parameters()).device
             return self._device
+
+    def prior_nll(self,z):
+        d = np.prod(z.shape[1:])
+        return .5*(z*z).sum(3).sum(2).sum(1) + .5*np.log(2*np.pi)*d
+
+    def nll(self,x):
+        z = self.get_all_z_squashed(x)
+        logdet = self.logdet()
+        return  self.prior_nll(z) - logdet
 
 
 class iEluNetMultiScale(iEluNet):
@@ -312,6 +347,8 @@ class iConv1x1(nn.Conv2d):
         inv_weight = torch.inverse(self.weight[:,:,0,0].double()).float().view(c, c, 1, 1)
         debiased_y = y - self.bias[None,:,None,None]
         x = F.conv2d(debiased_y,inv_weight)
+        # if torch.isnan(x).any():
+        #     assert False, "Nans encountered in iconv1x1"
         return x
 
     def forward(self, x):
@@ -375,6 +412,9 @@ def inverse_fft_conv3x3(x,weight):
     kernel_fft = np.conj(np.fft.fft2(padded_numpy.astype(np.float64),axes=[0,1]))
     W_fft_inv = np.linalg.inv(kernel_fft)
     filtered = (W_fft_inv@fft_input)
+    # if np.any(np.isnan(filtered)):
+    #     u,sigma,vh = np.linalg.svd(kernel_fft)
+    #     assert False, f"Lowest singular value is {np.min(sigma.reshape(-1))}, {np.max(np.abs(input_np.reshape(-1)))}"
     # u,sigma,vh = np.linalg.svd(kernel_fft)#'=
     # v,uh = vh.conj().transpose((0,1,3,2)),u.conj().transpose((0,1,3,2))
     # # Apply filter in fourier space

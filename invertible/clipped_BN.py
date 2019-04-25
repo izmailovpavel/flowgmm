@@ -124,4 +124,6 @@ class iBN(nn.BatchNorm2d):
         y_reshaped = y.permute(1,0,2,3).contiguous().view(channels,numel)
         mul = self.weight.unsqueeze(1)/(self.running_var + self.eps).pow(0.5).unsqueeze(1)
         unsquashed_y = (y_reshaped - self.bias.unsqueeze(1))/mul + self.running_mean.unsqueeze(1)
-        return unsquashed_y.view(channels,batchsize,height,width).permute(1,0,2,3).contiguous()
+        x = unsquashed_y.view(channels,batchsize,height,width).permute(1,0,2,3).contiguous()
+        #assert not torch.isnan(x).any(), "Nans in iBN"
+        return x
