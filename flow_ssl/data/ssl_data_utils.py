@@ -12,6 +12,7 @@ import torch
 from PIL import Image
 import numpy as np
 from torch.utils.data.sampler import Sampler
+from flow_ssl.data.image_datasets import SVHN_
 
 
 LOG = logging.getLogger('main')
@@ -36,7 +37,7 @@ def make_ssl_data_loaders(
                 transform_train, transform_test, use_validation, 
                 *args, **kwargs)
     elif dataset.lower() in ["mnist", "svhn"]:
-        return make_ssl_mnist_data_loaders(data_path, label_path, 
+        return make_ssl_npz_data_loaders(data_path, label_path, 
                 labeled_batch_size, unlabeled_batch_size, num_workers, 
                 transform_train, transform_test, use_validation, 
                 dataset=dataset, *args, **kwargs)
@@ -62,7 +63,6 @@ def make_ssl_npz_data_loaders(
         ds = SVHN_
     else:
         ds = getattr(torchvision.datasets, dataset.upper())
-    ds = torchvision.datasets.MNIST
     train_set = ds(data_path, transform=transform_train, train=True, download=True)
     if use_validation:
         val_size = 5000
@@ -72,9 +72,9 @@ def make_ssl_npz_data_loaders(
 
         print("Using train (" + str(len(train_set.train_data) - val_size) + 
               ") + validation (" + str(val_size) + ")")
-        train_set.train_data = torch.vstack([train_set.train_data[unlabeled_idxs], 
+        train_set.train_data = np.vstack([train_set.train_data[unlabeled_idxs], 
                                           train_set.train_data[labeled_idxs]])
-        train_set.train_labels = torch.hstack([train_set.train_labels[unlabeled_idxs], 
+        train_set.train_labels = np.hstack([train_set.train_labels[unlabeled_idxs], 
                                           train_set.train_labels[labeled_idxs]])
         idxs = np.arange(len(train_idxs))
         unlabeled_idxs = idxs[:len(unlabeled_idxs)]
