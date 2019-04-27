@@ -118,6 +118,7 @@ parser = argparse.ArgumentParser(description='RealNVP on CIFAR-10')
 
 parser.add_argument('--dataset', type=str, default="CIFAR10", required=True, metavar='DATA',
                 help='Dataset name (default: CIFAR10)')
+parser.add_argument('--use_validation', action='store_true', help='Use trainable validation set')
 parser.add_argument('--data_path', type=str, default=None, required=True, metavar='PATH',
                 help='path to datasets location (default: None)')
 parser.add_argument('--label_path', type=str, default=None, required=True, metavar='PATH',
@@ -181,13 +182,15 @@ if args.dataset.lower() == "mnist":
         transforms.RandomCrop(28, padding=4),
         transforms.ToTensor()
     ])
-else:
+elif args.dataset.lower() in ["cifar10", "svhn"]:
     img_shape = (3, 32, 32)
     transform_train = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor()
     ])
+else:
+    raise ValueError("Unsupported dataset "+args.dataset)
 
 transform_train = TransformTwice(transform_train)
 
@@ -203,7 +206,7 @@ trainloader, testloader, _ = make_ssl_data_loaders(
         args.num_workers, 
         transform_train, 
         transform_test, 
-        use_validation=False,
+        use_validation=args.use_validation,
         dataset=args.dataset.lower())
 
 # Model

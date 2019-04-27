@@ -35,15 +35,15 @@ def make_ssl_data_loaders(
                 labeled_batch_size, unlabeled_batch_size, num_workers, 
                 transform_train, transform_test, use_validation, 
                 *args, **kwargs)
-    elif dataset.lower() == "mnist":
+    elif dataset.lower() in ["mnist", "svhn"]:
         return make_ssl_mnist_data_loaders(data_path, label_path, 
                 labeled_batch_size, unlabeled_batch_size, num_workers, 
                 transform_train, transform_test, use_validation, 
-                *args, **kwargs)
+                dataset=dataset, *args, **kwargs)
     else:
         raise ValueError("Unknown dataset")
 
-def make_ssl_mnist_data_loaders(
+def make_ssl_npz_data_loaders(
     data_path,
     label_path,
     labeled_batch_size,
@@ -52,15 +52,18 @@ def make_ssl_mnist_data_loaders(
     transform_train, 
     transform_test, 
     use_validation=True, 
+    dataset="mnist"
     ):
-    
-    ds = torchvision.datasets.MNIST
-    train_set = ds(data_path, transform=transform_train, train=True, download=True)
 
     labels = np.load(label_path)
     labeled_idxs, unlabeled_idxs = labels['labeled_indices'], labels['unlabeled_indices']
-    num_classes = 10
-
+    
+    if dataset.lower() == "svhn":
+        ds = SVHN_
+    else:
+        ds = getattr(torchvision.datasets, dataset.upper())
+    ds = torchvision.datasets.MNIST
+    train_set = ds(data_path, transform=transform_train, train=True, download=True)
     if use_validation:
         val_size = 5000
         val_idxs = unlabeled_idxs[:val_size]
@@ -86,14 +89,16 @@ def make_ssl_mnist_data_loaders(
     
     else:
         test_set = ds(data_path, train=False, download=True, transform=transform_test)
-    
-    #relabeling train
+
+    train_set.train_labels[unlabeled_idxs] = NO_LABEL
     num_train = len(train_set.train_data)
+    num_classes = 10
+
+    #relabeling train
 
     # In case using validation
     
     assert num_train == len(labeled_idxs) + len(unlabeled_idxs)
-    train_set.train_labels[unlabeled_idxs] = NO_LABEL
 
     print("Num classes", num_classes)
     print("Labeled data: ", len(labeled_idxs))

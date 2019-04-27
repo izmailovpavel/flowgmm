@@ -92,6 +92,7 @@ parser.add_argument('--resume', type=str, default=None, required=False, metavar=
                 help='path to checkpoint to resume from (default: None)')
 parser.add_argument('--weight_decay', default=5e-5, type=float,
                     help='L2 regularization (only applied to the weight norm scale factors)')
+parser.add_argument('--use_validation', action='store_true', help='Use trainable validation set')
 
 # PAVEL
 parser.add_argument('--means', 
@@ -128,13 +129,15 @@ if args.dataset.lower() == "mnist":
         transforms.RandomCrop(28, padding=4),
         transforms.ToTensor()
     ])
-else:
+elif args.dataset.lower() in ["cifar10", "svhn"]:
     img_shape = (3, 32, 32)
     transform_train = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor()
     ])
+else:
+    raise ValueError("Unsupported dataset "+args.dataset)
 
 transform_test = transforms.Compose([
     transforms.ToTensor()
@@ -146,9 +149,9 @@ trainloader, testloader, _ = make_sup_data_loaders(
         args.num_workers, 
         transform_train, 
         transform_test, 
-        use_validation=False, 
+        use_validation=args.use_validation,
         shuffle_train=True,
-        dataset=args.dataset.upper())
+        dataset=args.dataset.lower())
 
 # Model
 print('Building model...')
