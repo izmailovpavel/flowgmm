@@ -5,11 +5,11 @@ from oil.tuning.study import Study, train_trial
 from oil.tuning.configGenerator import uniform,logUniform
 
 
-log_dir_base = os.path.expanduser('~/tb-experiments/gans')
+log_dir_base = os.path.expanduser('~/tb-experiments/gans_test')
 cfg_spec = {
-    'dataset': CIFAR10,
-    'num_epochs':100, 
-    'trainer_config':{'log_dir':lambda cfg: f'{log_dir_base}/{cfg['dataset'])}'},
+    'dataset': CIFAR10,#'num_epochs':100, 
+    'trainer_config':{'log_dir':lambda cfg: '{}/{}'.format(log_dir_base,cfg['dataset'])},
+    'num_epochs':4
     }
 Trial = simpleGanTrial(strict=True)
 
