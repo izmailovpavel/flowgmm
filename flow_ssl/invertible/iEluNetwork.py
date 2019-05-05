@@ -25,6 +25,7 @@ class iConv2d(nn.Module):
     @property
     def iters_per_reverse(self):
         return self._reverse_iters/self._inverses_evaluated
+
     def forward(self,x):
         self._shape = x.shape
         if self._circ:
@@ -33,6 +34,7 @@ class iConv2d(nn.Module):
         else:
             return self.conv(x)
     # FFT inverse method
+
     def inverse(self,y):
         x = inverse_fft_conv3x3(y-self.conv.bias[None,:,None,None],self.conv.weight)
         # if torch.isnan(x).any():
