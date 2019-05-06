@@ -4,14 +4,15 @@ import torch.nn as nn
 import numpy as np
 from oil.utils.utils import Expression,export,Named
 from oil.architectures.parts import ResBlock,conv2d
-from downsample import SqueezeLayer,split,merge,padChannels,keepChannels
-from clipped_BN import MeanOnlyBN, iBN
+from .downsample import SqueezeLayer,split,merge,padChannels,keepChannels,NNdownsample,iAvgPool2d
+from .downsample import iLogits
+from .clipped_BN import MeanOnlyBN, iBN
 #from torch.nn.utils import spectral_norm
-from auto_inverse import iSequential
+from .auto_inverse import iSequential
 import scipy as sp
 import scipy.sparse
-from iresnet import both, I, addZslot, Join,flatten
-from spectral_norm import pad_circular_nd
+from .iresnet import both, I, addZslot, Join,flatten
+from .spectral_norm import pad_circular_nd
 
 class iConv2d(nn.Module):
     """ wraps conv2d in a module with an inverse function """
@@ -75,7 +76,7 @@ class iConv2d(nn.Module):
                         torch.cat([-B, A],dim=1)], dim=0).permute(2,3,0,1)
         Dt = D.permute(0, 1, 3, 2) #transpose of D
         lhs = torch.matmul(D, Dt)
-        chol_output = torch.cholesky(lhs+3e-5*torch.eye(lhs.size(-1)).to(lhs.device))
+        chol_output = torch.cholesky(lhs+1e-4*torch.eye(lhs.size(-1)).to(lhs.device))
         eigs = torch.diagonal(chol_output,dim1=-2,dim2=-1)
         return (eigs.log().sum() / 2.0).expand(bs)
 
@@ -114,10 +115,12 @@ class iSLReLU(nn.Module):
         #logdetJ = \sum_i log J_ii # sum over c,h,w not batch
         x = self._last_x
         a = self.alpha
-        return (1+a*x/(torch.sqrt(1+x*x))).sum(3).sum(2).sum(1)/(1+a)
+        log_dets = torch.log((1+a*x/(torch.sqrt(1+x*x)))/(1+a))
+        if len(x.shape)==2: return log_dets.sum(1)
+        else: return log_dets.sum(3).sum(2).sum(1)
 
 def iConvBNelu(ch):
-    return iSequential(iConv2d(ch,ch),iBN(ch),iSLReLU())
+    return iSequential(iConv2d(ch,ch),iSLReLU(.1))#iSequential(iConv2d(ch,ch),iBN(ch),iSLReLU())
 
 def passThrough(*layers):
     return iSequential(*[both(layer,I) for layer in layers])
@@ -137,12 +140,12 @@ class iEluNet(nn.Module,metaclass=Named):
             *iConvBNelu(k),
             *iConvBNelu(k),
             *iConvBNelu(k),
-            SqueezeLayer(2),
+            NNdownsample(),#SqueezeLayer(2),
             #Expression(lambda x: torch.cat((x[:,:k],x[:,3*k:]),dim=1)),
             *iConvBNelu(4*k),
             *iConvBNelu(4*k),
             *iConvBNelu(4*k),
-            SqueezeLayer(2),
+            NNdownsample(),#SqueezeLayer(2),
             #Expression(lambda x: torch.cat((x[:,:2*k],x[:,6*k:]),dim=1)),
             *iConvBNelu(16*k),
             *iConvBNelu(16*k),
@@ -174,11 +177,11 @@ class iEluNet(nn.Module,metaclass=Named):
             return self._device
 
     def prior_nll(self,z):
-        d = np.prod(z.shape[1:])
-        return .5*(z*z).sum(3).sum(2).sum(1) + .5*np.log(2*np.pi)*d
+        d = z.shape[1]
+        return .5*(z*z).sum(-1) + .5*np.log(2*np.pi)*d
 
     def nll(self,x):
-        z = self.get_all_z_squashed(x)
+        z = self.get_all_z_squashed(x).reshape(x.shape[0],-1)
         logdet = self.logdet()
         return  self.prior_nll(z) - logdet
 
@@ -201,14 +204,14 @@ class iEluNetMultiScale(iEluNet):
             passThrough(*iConvBNelu(k)),
             passThrough(*iConvBNelu(k)),
             passThrough(*iConvBNelu(k)),
-            passThrough(SqueezeLayer(2)),
+            passThrough(NNdownsample()),#SqueezeLayer(2)),
             passThrough(iConv1x1(4*k)),
             keepChannels(2*k),
             
             passThrough(*iConvBNelu(2*k)),
             passThrough(*iConvBNelu(2*k)),
             passThrough(*iConvBNelu(2*k)),
-            passThrough(SqueezeLayer(2)),
+            passThrough(NNdownsample()),
             passThrough(iConv1x1(8*k)),# (replace with iConv1x1 or glow style 1x1)
             keepChannels(4*k),
             
@@ -248,35 +251,41 @@ class iEluNetMultiScale(iEluNet):
     def sample(self,bs=1):
         z_all = [torch.randn(bs,*shape).to(self.device) for shape in self.z_shapes]
         return self.inverse(z_all)
-
+        
+def ConvBNrelu(in_channels,out_channels,stride=1):
+    return nn.Sequential(
+        nn.Conv2d(in_channels,out_channels,3,padding=1,stride=stride),
+        nn.BatchNorm2d(out_channels),
+        nn.ReLU()
+    )
 class iEluNetMultiScaleLarger(iEluNetMultiScale):
-    def __init__(self, num_classes=10,k=32):
+    def __init__(self, num_classes=10,k=128):
         super().__init__()
         self.num_classes = num_classes
-        self.k = k = 2*k
+        self.k = k
         self.body = iSequential(
             padChannels(k-3),
             addZslot(),
             passThrough(*iConvBNelu(k)),
             passThrough(*iConvBNelu(k)),
             passThrough(*iConvBNelu(k)),
-            passThrough(SqueezeLayer(2)),
-            passThrough(iConv1x1(4*k)),
+            passThrough(NNdownsample()),
+            #passThrough(iConv1x1(4*k)),
             keepChannels(2*k),
             passThrough(*iConvBNelu(2*k)),
             passThrough(*iConvBNelu(2*k)),
             passThrough(*iConvBNelu(2*k)),
-            passThrough(SqueezeLayer(2)),
-            passThrough(iConv1x1(8*k)),
+            passThrough(NNdownsample()),
+            #passThrough(iConv1x1(8*k)),
             keepChannels(2*k),
             passThrough(*iConvBNelu(2*k)),
             passThrough(*iConvBNelu(2*k)),
             passThrough(*iConvBNelu(2*k)),
-            passThrough(iConv2d(2*k,2*k)),
+            #passThrough(iConv2d(2*k,2*k)),
             Join(),
         )
         self.head = nn.Sequential(
-            nn.BatchNorm2d(2*k),
+            #nn.BatchNorm2d(2*k),
             Expression(lambda u:u.mean(-1).mean(-1)),
             nn.Linear(2*k,num_classes)
         )
@@ -288,48 +297,155 @@ class iEluNetMultiScaleLarger(iEluNetMultiScale):
         shapes = [(2*k,h//2,w//2),(6*k,h//4,w//4),(2*k,h//4,w//4)]
         return shapes
 
-class iEluNet3d(iEluNetMultiScale):
-    def __init__(self, num_classes=10,k=32):
+def CircBNrelu(in_channels,out_channels):
+    return nn.Sequential(
+        iConv2d(in_channels,out_channels),
+        nn.BatchNorm2d(out_channels),
+        nn.ReLU()
+    )
+
+
+class DegredationTester(nn.Module):
+    def __init__(self, num_classes=10,k=128,circ=False,slrelu=False,ds='max'):
         super().__init__()
         self.num_classes = num_classes
-        self.k = k = 2*k
+        self.k = k
+        
+        conv = lambda c1,c2: iConv2d(c1,c2,circ=circ)
+        BN = nn.BatchNorm2d
+        relu = iSLReLU if slrelu else nn.ReLU
+        if ds=='max': downsample = nn.MaxPool2d(2)
+        elif ds=='checkerboard': downsample = SqueezeLayer(2)
+        elif ds=='nn': downsample = NNdownsample()
+        elif ds=='avg': downsample = iAvgPool2d()
+        else: assert False, "unknown option"
+        CBR = lambda c1,c2: nn.Sequential(conv(c1,c2),BN(c2),relu())
+        self.net = nn.Sequential(
+            CBR(3,k),
+            CBR(k,k),
+            CBR(k,2*k),
+            downsample,
+            Expression(lambda x: x[:,:2*k]),
+            CBR(2*k,2*k),
+            CBR(2*k,2*k),
+            CBR(2*k,2*k),
+            downsample,
+            Expression(lambda x: x[:,:2*k]),
+            CBR(2*k,2*k),
+            CBR(2*k,2*k),
+            CBR(2*k,2*k),
+            Expression(lambda u:u.mean(-1).mean(-1)),
+            nn.Linear(2*k,num_classes)
+        )
+    def forward(self,x):
+        return self.net(x)
+
+
+
+class iEluNet3d(iEluNetMultiScale):
+    def __init__(self, num_classes=10,k=64):
+        super().__init__()
+        self.num_classes = num_classes
+        self.k = k
         self.body = iSequential(
-            addZslot(),
-            passThrough(*iConvBNelu(3)),
-            passThrough(*iConvBNelu(3)),
-            passThrough(*iConvBNelu(3)),
-            passThrough(SqueezeLayer(2)),
-            passThrough(iConv1x1(12)),
-            passThrough(*iConvBNelu(12)),
-            passThrough(*iConvBNelu(12)),
-            passThrough(*iConvBNelu(12)),
-            passThrough(SqueezeLayer(2)),
-            passThrough(iConv1x1(48)),
-            passThrough(*iConvBNelu(48)),
-            passThrough(*iConvBNelu(48)),
-            passThrough(*iConvBNelu(48)),
-            passThrough(iConv2d(48,48)),
-            # passThrough(SqueezeLayer(2)),
-            # passThrough(iConv1x1(4*48)),
-            # keepChannels(2*k),
-            # passThrough(*iConvBNelu(2*k)),
-            # passThrough(*iConvBNelu(2*k)),
-            # passThrough(*iConvBNelu(2*k)),
-            #passThrough(iConv2d(48,48)),
-            Join(),
+            iLogits(),
+            *iConvBNelu(3),
+            *iConvBNelu(3),
+            *iConvBNelu(3),
+            NNdownsample(),
+            *iConvBNelu(12),
+            *iConvBNelu(12),
+            *iConvBNelu(12),
+            NNdownsample(),
+            *iConvBNelu(48),
+            *iConvBNelu(48),
+            *iConvBNelu(48),
+            NNdownsample(),
+            *iConvBNelu(192),
+            *iConvBNelu(192),
+            *iConvBNelu(192),
+            iConv2d(192,192),
         )
         self.head = nn.Sequential(
-            nn.BatchNorm2d(48),
             Expression(lambda u:u.mean(-1).mean(-1)),
-            nn.Linear(48,num_classes)
+            nn.Linear(192,num_classes)
         )
+
+    def sample(self,bs=1):
+        z_all = torch.randn(bs,192,32//8,32//8).to(self.device)
+        return self.inverse(z_all)
     @property
     def z_shapes(self):
         # For CIFAR10: starting size = 32x32
         h = w = 32
         k = self.k
-        shapes = [(48,h//4,h//4)]#[(3*2**6-2*k,h//8,w//8),(2*k,h//8,w//8)]
+        shapes = [(192,h//8,h//8)]#[(3*2**6-2*k,h//8,w//8),(2*k,h//8,w//8)]#[(48,h//4,h//4)]#
         return shapes
+
+
+
+class iLinear(iEluNet3d):
+    def __init__(self, num_classes=10,k=128):
+        super().__init__()
+        self.num_classes = num_classes
+        self.k = k
+        self.body = iSequential(
+            iLogits(),
+            iConv2d(3,3),
+            iConv2d(3,3),
+            iConv2d(3,3),
+            NNdownsample(),
+            iConv2d(12,12),
+            iConv2d(12,12),
+            iConv2d(12,12),
+            NNdownsample(),
+            iConv2d(48,48),
+            iConv2d(48,48),
+            iConv2d(48,48),
+            NNdownsample(),
+            iConv2d(192,192),
+            iConv2d(192,192),
+            iConv2d(192,192),
+        )
+        self.head = nn.Sequential(
+            Expression(lambda u:u.mean(-1).mean(-1)),
+            nn.Linear(192,num_classes)
+        )
+
+    def sample(self,bs=1):
+        z_all = torch.randn(bs,192,32//8,32//8).to(self.device)
+        return self.inverse(z_all)
+    @property
+    def z_shapes(self):
+        # For CIFAR10: starting size = 32x32
+        h = w = 32
+        k = self.k
+        shapes = [(192,h//8,h//8)]#[(3*2**6-2*k,h//8,w//8),(2*k,h//8,w//8)]#[(48,h//4,h//4)]#
+        return shapes
+
+#addZslot(),
+# NNdownsample(),
+# passThrough(*iConvBNelu(3)),
+# passThrough(NNdownsample()),
+# #passThrough(iConv1x1(12)),
+# passThrough(*iConvBNelu(12)),
+# passThrough(*iConvBNelu(12)),
+# passThrough(*iConvBNelu(12)),
+# passThrough(NNdownsample()),
+# #passThrough(iConv1x1(48)),
+# passThrough(*iConvBNelu(48)),
+# passThrough(*iConvBNelu(48)),
+# passThrough(*iConvBNelu(48)),
+# passThrough(NNdownsample()),
+# #passThrough(iConv1x1(4*48)),
+# #keepChannels(2*k),
+# passThrough(*iConvBNelu(192)),
+# passThrough(*iConvBNelu(192)),
+# passThrough(*iConvBNelu(192)),
+# passThrough(iConv2d(192,192)),
+# Join(),
+
+
 
 import unittest
 
@@ -358,30 +474,30 @@ class iConv1x1(nn.Conv2d):
 
 class TestLogDet(unittest.TestCase):
     pass
-    # def test_iconv(self, channels=64, seed=2019,h=8):
-    #     torch.random.manual_seed(seed)
+    def test_iconv(self, channels=64, seed=2019,h=8):
+        torch.random.manual_seed(seed)
 
-    #     weight_obj = iConv2d(channels, channels)
-    #     w=h
-    #     input_activation = torch.randn(1,channels,h,w)
-    #     _ = weight_obj(input_activation)
-    #     weight = weight_obj.conv.weight
-    #     weight_numpy = weight.detach().cpu().permute((2,3,0,1)).numpy()
+        weight_obj = iConv2d(channels, channels)
+        w=h
+        input_activation = torch.randn(1,channels,h,w)
+        _ = weight_obj(input_activation)
+        weight = weight_obj.conv.weight
+        weight_numpy = weight.detach().cpu().permute((2,3,0,1)).numpy()
 
-    #     # compute 2d fft 
-    #    # print(weight_numpy.shape)
-    #     kernel_fft = np.fft.fft2(weight_numpy,[h,w], axes=[0,1], norm=None)
-    #     padded_numpy = np.pad(weight_numpy,((0,h-3),(0,w-3),(0,0),(0,0)),mode='constant')
-    #     kernel_fft2 = np.fft.fft2(padded_numpy, axes=[0,1])
-    #     #print("original",(kernel_fft-kernel_fft2))
-    #     # then take svds
-    #     svds = np.linalg.svd(kernel_fft, compute_uv=False)
-    #     # finally log det is sum(log(singular values))
-    #     true_logdet = np.sum(np.log(svds))
-    #     #print(np.min(svds))
-    #     relative_error = torch.norm(true_logdet - weight_obj.logdet()) / np.linalg.norm(true_logdet)
-    #     print('relative error is: ', relative_error)
-    #     self.assertLess(relative_error, 1e-4)
+        # compute 2d fft 
+       # print(weight_numpy.shape)
+        kernel_fft = np.fft.fft2(weight_numpy,[h,w], axes=[0,1], norm=None)
+        padded_numpy = np.pad(weight_numpy,((0,h-3),(0,w-3),(0,0),(0,0)),mode='constant')
+        kernel_fft2 = np.fft.fft2(padded_numpy, axes=[0,1])
+        #print("original",(kernel_fft-kernel_fft2))
+        # then take svds
+        svds = np.linalg.svd(kernel_fft, compute_uv=False)
+        # finally log det is sum(log(singular values))
+        true_logdet = np.sum(np.log(svds))
+        #print(np.min(svds))
+        relative_error = torch.norm(true_logdet - weight_obj.logdet()) / np.linalg.norm(true_logdet)
+        print('relative error is: ', relative_error)
+        self.assertLess(relative_error, 1e-4)
 
 def fft_conv3x3(x,weight):
     bs,c,h,w = x.shape
