@@ -14,6 +14,7 @@ class SequentialWithAutoInverseAndLogDet(torch.nn.Sequential):
     def logdet(self):
         log_det = 0
         for module in self._modules.values():
+            #print(module)
             assert hasattr(module,'logdet'), f'{module} has no logdet defined'
             log_det += module.logdet()
         return log_det

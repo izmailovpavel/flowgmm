@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from oil.utils.utils import Expression,export,Named
 import torch.nn.functional as F
+import numpy as np
 #https://github.com/rtqichen/ffjord/blob/master/lib/layers/squeeze.py
 
 
@@ -63,7 +64,16 @@ def add_zeros_every4(a):
     with_zeros_extended = torch.zeros(bs,c//3,4,h,w).to(a.device)
     with_zeros_extended[:,:,1:] = a.reshape(bs,c//3,3,h,w)
     return with_zeros_extended.reshape(bs,4*c//3,h,w)
-    
+
+def add_minus_sum_every4(a):
+    bs,c,h,w = a.shape
+    assert not c%3, "Channels not divisible by 3"
+    with_minus_sum = torch.zeros(bs,c//3,4,h,w).to(a.device)
+    a_reshaped = a.reshape(bs,c//3,3,h,w)
+    with_minus_sum[:,:,1:] = a_reshaped
+    with_minus_sum[:,:,0] = - a_reshaped.sum(2)
+    return with_minus_sum.reshape(bs,4*c//3,h,w)
+
 @export
 class NNdownsample(nn.Module):
     def forward(self,x):
@@ -81,6 +91,27 @@ class NNdownsample(nn.Module):
         return full_upsampled
     def logdet(self):
         return 0
+
+@export
+class iAvgPool2d(nn.Module):
+    def forward(self,x):
+        self._x_shape = x.shape
+        self._x_device = x.device
+        downsampled = F.avg_pool2d(x,2,stride=2)
+        resampled = F.interpolate(downsampled,scale_factor=2)
+        lost_info = squeeze(x-resampled,2)
+        nonzero_info = except_every4(lost_info) # no extra info in channels 0,4,8...
+        return torch.cat((downsampled,nonzero_info),dim=1)
+    def inverse(self,y):
+        c = y.shape[1]
+        downsampled,nonzero_info = torch.split(y,(c//4,3*c//4),dim=1)
+        lost_info = add_minus_sum_every4(nonzero_info)
+        avg_upsampled = F.interpolate(downsampled,scale_factor=2)# the average
+        full_upsampled = avg_upsampled + unsqueeze(lost_info)
+        return full_upsampled
+    def logdet(self):
+        bs,c,h,w = self._x_shape
+        return (torch.log(torch.Tensor([1./4]))*c*h*w/4).to(self._x_device).expand(bs)
 
 
 class padChannels(nn.Module):
@@ -148,3 +179,24 @@ def pad_circular_nd(x: torch.Tensor, pad: int, dim) -> torch.Tensor:
         pass
     #print(x.shape)
     return x
+
+class iLogits(nn.Module):
+    #cnstr = 0.9
+    def forward(self,x):
+        # assumes x values are between 0 and 1
+        z = (x * 255. + torch.rand_like(x)) / 256.
+        z = (2 * z - 1) * 0.9
+        z = (z + 1) / 2
+        z = z.log() - (1-z).log()
+        self._z = z
+        if torch.isnan(x).any():
+            assert False, "Nans encountered in iLogits"
+        return z
+    def inverse(self,y):
+        return torch.sigmoid(y)
+    def logdet(self):
+        y = self._z
+        spl = F.softplus(torch.Tensor([.1]).log()-torch.Tensor([.9]).log()).to(y.device)
+        logdet_output =  (F.softplus(y)+F.softplus(-y)-spl).sum(3).sum(2).sum(1)
+        #print(f"ilogits_logdet_shape {logdet_output}")
+        return logdet_output

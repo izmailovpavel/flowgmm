@@ -7,13 +7,13 @@ import numpy as np
 from torch.nn.utils import weight_norm
 from oil.utils.utils import Expression,export,Named
 from oil.architectures.parts import ResBlock,conv2d
-from blocks import ConcatResBlock,ODEBlock,RNNBlock
-from blocks import ConcatBottleBlock,BezierResBlock
-from downsample import SqueezeLayer,split,merge,padChannels,keepChannels
-from clipped_BN import MeanOnlyBN, iBN
+from .blocks import ConcatResBlock,ODEBlock,RNNBlock
+from .blocks import ConcatBottleBlock,BezierResBlock
+from .downsample import SqueezeLayer,split,merge,padChannels,keepChannels
+from .clipped_BN import MeanOnlyBN, iBN
 #from torch.nn.utils import spectral_norm
-from auto_inverse import iSequential
-from spectral_norm import SN
+from .auto_inverse import iSequential
+from .spectral_norm import SN
 
 
 # def conv2d(in_channels,out_channels,kernel_size=3,dilation=1,**kwargs):

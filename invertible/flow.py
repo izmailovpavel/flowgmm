@@ -23,7 +23,7 @@ class Flow(Trainer):
         x,y = minibatch
         if model is None: model = self.model
         with torch.autograd.enable_grad():
-            x.requires_grad = True
+            #x.requires_grad = True
             z = model.get_all_z_squashed(x)
             
             # 32 x (32x32x32)
@@ -49,7 +49,7 @@ class Flow(Trainer):
                 # for i,p in enumerate(self.model.parameters()):
                 #     if (i>=5) and (i<8): 
                 #         print(f"Some weight: {p.reshape(-1)[-1]}")
-            img_grid = vutils.make_grid(fake_images, normalize=True)
+            img_grid = vutils.make_grid(fake_images, normalize=False,range=(0,1))
             self.logger.add_image('samples', img_grid, step)
         super().logStuff(step,minibatch)
 
@@ -66,7 +66,7 @@ from oil.tuning.study import train_trial
 from oil.datasetup.dataloaders import getLabLoader
 from oil.datasetup.datasets import CIFAR10
 from oil.architectures.img_classifiers import layer13s
-from iresnet import iResnet,iResnetLarge
+from invertible.iresnet import iResnet,iResnetLarge
 import collections
 
 def simpleFlowTrial(strict=False):
@@ -78,7 +78,7 @@ def simpleFlowTrial(strict=False):
             'num_epochs':100,'trainer_config':{},
             }
         recursively_update(cfg,config)
-        trainset = cfg['dataset']('~/datasets/{}/'.format(cfg['dataset']))
+        trainset = cfg['dataset']('~/datasets/{}/'.format(cfg['dataset']),flow=True)
         device = torch.device('cuda')
         fullCNN = cfg['network'](num_classes=trainset.num_classes,**cfg['net_config']).to(device)
         
@@ -86,7 +86,7 @@ def simpleFlowTrial(strict=False):
         dataloaders['train'], dataloaders['dev'] = getLabLoader(trainset,**cfg['loader_config'])
         dataloaders['Train'] = islice(dataloaders['train'],10000//cfg['loader_config']['lab_BS'])
         if len(dataloaders['dev'])==0:
-            testset = cfg['dataset']('~/datasets/{}/'.format(cfg['dataset']),train=False)
+            testset = cfg['dataset']('~/datasets/{}/'.format(cfg['dataset']),train=False,flow=True)
             dataloaders['test'] = DataLoader(testset,batch_size=cfg['loader_config']['lab_BS'],shuffle=False)
         dataloaders = {k:LoaderTo(v,device) for k,v in dataloaders.items()}
         opt_constr = lambda params: torch.optim.Adam(params, **cfg['opt_config'])
