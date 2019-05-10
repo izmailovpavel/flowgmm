@@ -1,4 +1,4 @@
-import torch
+)mport torch
 import torch.nn.functional as F
 import torch.nn as nn
 import numpy as np
@@ -12,118 +12,6 @@ import scipy as sp
 import scipy.sparse
 from iresnet import both, I, addZslot, Join,flatten
 from spectral_norm import pad_circular_nd
-
-class iConv2d(nn.Module):
-    """ wraps conv2d in a module with an inverse function """
-    def __init__(self,*args,inverse_tol=1e-7,circ=True,**kwargs):
-        super().__init__()
-        self.conv = conv2d(*args,**kwargs)
-        self.inverse_tol = inverse_tol
-        self._reverse_iters = 0
-        self._inverses_evaluated = 0
-        self._circ= circ
-    @property
-    def iters_per_reverse(self):
-        return self._reverse_iters/self._inverses_evaluated
-
-    def forward(self,x):
-        self._shape = x.shape
-        if self._circ:
-            padded_x = pad_circular_nd(x,1,dim=[2,3])
-            return F.conv2d(padded_x,self.conv.weight,self.conv.bias)
-        else:
-            return self.conv(x)
-    # FFT inverse method
-
-    def inverse(self,y):
-        x = inverse_fft_conv3x3(y-self.conv.bias[None,:,None,None],self.conv.weight)
-        # if torch.isnan(x).any():
-        #     assert False, "Nans encountered in iconv2d"
-        return x
-    # GMRES inverse method
-    # def inverse(self,y):
-    #     self._inverses_evaluated +=1
-    #     d = np.prod(self._shape[1:])
-    #     A = sp.sparse.linalg.LinearOperator((d,d),matvec=self.np_matvec)
-    #     bs = y.shape[0]
-    #     x = torch.zeros_like(y)
-    #     conv_diag = torch.diag(self.conv.weight[:,:,1,1]).cpu().data.numpy()[:,None,None] #shape c x 1 x 1
-    #     inv_diag_operator = sp.sparse.linalg.LinearOperator((d,d),
-    #         matvec=lambda v: (v.reshape(*self._shape[1:]).astype(np.float32)/conv_diag).reshape(-1))
-    #     for i in range(bs):
-    #         np_y = (y[i]-self.conv.bias[:,None,None]).cpu().data.numpy().reshape(np.prod(self._shape[1:]))
-    #         #print(np_y.shape)
-    #         np_x,info = sp.sparse.linalg.lgmres(A,np_y,tol=1e-3,maxiter=500,atol=100,M=inv_diag_operator)
-    #         assert info==0, f"lgmres failed with info {info}"
-    #         x[i] = torch.from_numpy(np_x.astype(np.float32).reshape(y[i].shape)).to(self.conv.weight.device)
-    #     return x
-
-    # def log_data(self,logger,step,name=None):
-    #     logger.add_scalars('info',{
-    #         f'Reverse iters_{name}': self.iters_per_reverse,})
-    def np_matvec(self,V):
-        self._reverse_iters +=1
-        V_pt_img = torch.from_numpy(V.reshape(1,*self._shape[1:]).astype(np.float32)).to(self.conv.weight.device)
-        return F.conv2d(V_pt_img,self.conv.weight,padding=1).cpu().data.numpy().reshape(V.shape)
-        #return (self(V_pt_img)-self.conv.bias[None,:,None,None]).cpu().data.numpy().reshape(V.shape)
-    def logdet(self):
-        bs,c,h,w = self._shape
-        padded_weight = F.pad(self.conv.weight,(0,h-3,0,w-3))
-        w_fft = torch.rfft(padded_weight, 2, onesided=False, normalized=False)
-        # pull out real and complex parts
-        A = w_fft[...,0]
-        B = w_fft[...,1]
-        D = torch.cat([ torch.cat([ A, B],dim=1), 
-                        torch.cat([-B, A],dim=1)], dim=0).permute(2,3,0,1)
-        Dt = D.permute(0, 1, 3, 2) #transpose of D
-        lhs = torch.matmul(D, Dt)
-        chol_output = torch.cholesky(lhs+3e-5*torch.eye(lhs.size(-1)).to(lhs.device))
-        eigs = torch.diagonal(chol_output,dim1=-2,dim2=-1)
-        return (eigs.log().sum() / 2.0).expand(bs)
-
-
-class iElu(nn.ELU):
-    def __init__(self):
-        super().__init__()
-    def forward(self,x):
-        self._last_x = x
-        return super().forward(x)
-    def inverse(self,y):
-        # y if y>0 else log(1+y)
-        x = F.relu(y) - F.relu(-y)*torch.log(1+y)/y
-        #assert not torch.isnan(x).any(), "Nans in iElu"
-        return x
-    def logdet(self):
-        #logdetJ = \sum_i log J_ii # sum over c,h,w not batch
-        return (-F.relu(-self._last_x)).sum(3).sum(2).sum(1) 
-
-class iSLReLU(nn.Module):
-    def __init__(self,slope=.1):
-        self.alpha = (1 - slope)/(1+slope)
-        super().__init__()
-    def forward(self,x):
-        self._last_x = x
-        y = (x+self.alpha*(torch.sqrt(1+x*x)-1))/(1+self.alpha)
-        return y
-    def inverse(self,y):
-        # y if y>0 else log(1+y)
-        a = self.alpha
-        b = (1+a)*y + a
-        x = (torch.sqrt(a**2 + (a*b)**2-a**4) - b)/(a**2-1)
-        #assert not torch.isnan(x).any(), "Nans in iSLReLU"
-        return x
-    def logdet(self):
-        #logdetJ = \sum_i log J_ii # sum over c,h,w not batch
-        x = self._last_x
-        a = self.alpha
-        return (1+a*x/(torch.sqrt(1+x*x))).sum(3).sum(2).sum(1)/(1+a)
-
-def iConvBNelu(ch):
-    return iSequential(iConv2d(ch,ch),iBN(ch),iSLReLU())
-
-def passThrough(*layers):
-    return iSequential(*[both(layer,I) for layer in layers])
-
 
 
 class iEluNet(nn.Module,metaclass=Named):
@@ -334,29 +222,6 @@ class iEluNet3d(iEluNetMultiScale):
         return shapes
 
 import unittest
-
-
-
-class iConv1x1(nn.Conv2d):
-    def __init__(self, channels):
-        super().__init__(channels,channels,1)
-
-    def logdet(self):
-        bs,c,h,w = self._input_shape
-        return (torch.slogdet(self.weight[:,:,0,0])[1]*h*w).expand(bs)
-    def inverse(self,y):
-        bs,c,h,w = self._input_shape
-        inv_weight = torch.inverse(self.weight[:,:,0,0].double()).float().view(c, c, 1, 1)
-        debiased_y = y - self.bias[None,:,None,None]
-        x = F.conv2d(debiased_y,inv_weight)
-        # if torch.isnan(x).any():
-        #     assert False, "Nans encountered in iconv1x1"
-        return x
-
-    def forward(self, x):
-        self._input_shape = x.shape
-        return F.conv2d(x,self.weight,self.bias)
-
 
 class TestLogDet(unittest.TestCase):
     pass

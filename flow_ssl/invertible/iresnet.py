@@ -124,32 +124,6 @@ class iConv2d(nn.Module):
     def logdet(self):
         raise NotImplementedError
 
-class addZslot(nn.Module):
-    def __init__(self):
-        super().__init__()
-    def forward(self,x):
-        return x,[]
-    def inverse(self,output):
-        x,z = output
-        assert not z, "nonempty z received"
-        return x
-    def logdet(self):
-        return 0
-
-class Join(nn.Module):
-    def __init__(self):
-        super().__init__()
-    def forward(self,x):
-        y,z = x
-        z.append(y)
-        return z
-    def inverse(self,z):
-        #y = z.pop()
-        z,y = z[:-1],z[-1]
-        return y,z
-    def logdet(self):
-        return 0
-
 def BNrelu(channels,gn=False):
     norm_layer = nn.GroupNorm(channels//16,channels) if gn else nn.BatchNorm2d(channels)
     return nn.Sequential(nn.ReLU(),norm_layer)
@@ -178,31 +152,6 @@ class aResnet(nn.Module,metaclass=Named):
     def forward(self,x):
         return self.net(x)
 
-class Id(nn.Module):
-    def __init__(self):
-        super().__init__()
-    def forward(self,x):
-        return x
-    def inverse(self,y):
-        return y
-    def logdet(self):
-        return 0
-
-I = Id()
-
-class both(nn.Module):
-    def __init__(self,module1,module2):
-        super().__init__()
-        self.module1 = module1
-        self.module2 = module2
-    def forward(self,inp):
-        x,z = inp
-        return self.module1(x),self.module2(z)
-    def inverse(self,output):
-        y,z_out = output
-        return self.module1.inverse(y),self.module2.inverse(z_out)
-    def logdet(self):
-        return self.module1.logdet() + self.module2.logdet()
 
 # Converts a list of torch.tensors into a single flat torch.tensor
 def flatten(tensorList):
@@ -221,6 +170,8 @@ def unflatten_like(vector, likeTensorList):
         outList.append(vector[i:i+n].view(tensor.shape))
         i+=n
     return outList
+
+I = Id()
 
 @export
 class iResnet(nn.Module,metaclass=Named):
