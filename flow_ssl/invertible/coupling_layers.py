@@ -2,12 +2,13 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 import numpy as np
-from oil.architectures.parts import ResBlock,conv2d
 #from torch.nn.utils import spectral_norm
 import scipy as sp
 import scipy.sparse
-from .spectral_norm import pad_circular_nd
+from .normalizations import pad_circular_nd
+from ..utils import export, conv2d
 
+@export
 class iConv2d(nn.Module):
     """ wraps conv2d in a module with an inverse function """
     def __init__(self,*args,inverse_tol=1e-7,circ=True,**kwargs):
@@ -33,7 +34,7 @@ class iConv2d(nn.Module):
         # if torch.isnan(x).any():
         #     assert False, "Nans encountered in iconv2d"
         return x
-
+@export
 class iConv1x1(nn.Conv2d):
     def __init__(self, channels):
         super().__init__(channels,channels,1)
