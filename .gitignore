@@ -1,0 +1,3 @@
+*.pdf
+__pycache__
+runs
