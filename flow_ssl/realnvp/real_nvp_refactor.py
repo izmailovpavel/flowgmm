@@ -7,19 +7,20 @@ from flow_ssl.realnvp.coupling_layer import MaskCheckerboard
 from flow_ssl.realnvp.coupling_layer import MaskChannelwise
 
 from flow_ssl.invertible.auto_inverse import iSequential
+from flow_ssl.downsample import iLogits
 from flow_ssl.invertible.layers import keepChannels
 from flow_ssl.invertible.layers import addZslot
 from flow_ssl.invertible.layers import passThrough
 
 
-class RealNVPBase(nn.Module):
+class RealNVP(nn.Module):
 
     def __init__(self, num_scales=2, in_channels=3, mid_channels=64, num_blocks=8):
         super(RealNVP, self).__init__()
         # Register data_constraint to pre-process images, not learnable
         self.register_buffer('data_constraint', torch.tensor([0.9], dtype=torch.float32)) 
         
-        layers = [addZslot(), passThrough(Dequantization(self.data_constraint))]
+        layers = [addZslot(), passThrough(iLogits)]
 
         for scale in range(num_scales):
             in_couplings = *_threecouplinglayers(in_channels, mid_channels, num_blocks, MaskCheckerboard)
