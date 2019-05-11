@@ -3,10 +3,11 @@ import torch.nn as nn
 #from oil.utils.utils import Expression,export,Named
 import torch.nn.functional as F
 import numpy as np
+from ..utils import export
 #https://github.com/rtqichen/ffjord/blob/master/lib/layers/squeeze.py
 
 
-#@export
+@export
 class SqueezeLayer(nn.Module):
     def __init__(self, downscale_factor):
         super().__init__()
@@ -113,7 +114,7 @@ class iAvgPool2d(nn.Module):
         bs,c,h,w = self._x_shape
         return (torch.log(torch.Tensor([1./4]))*c*h*w/4).to(self._x_device).expand(bs)
 
-
+@export
 class padChannels(nn.Module):
     def __init__(self, pad_size):
         super().__init__()
@@ -130,6 +131,7 @@ class padChannels(nn.Module):
     def logdet(self):
         return 0
 
+@export
 class keepChannels(nn.Module):
     def __init__(self,k):
         """k represents the number of channels in x to keep"""
@@ -157,6 +159,7 @@ def split(x,k):
 def merge(x1, x2):
     return torch.cat((x1, x2), 1)
 
+@export
 def pad_circular_nd(x: torch.Tensor, pad: int, dim) -> torch.Tensor:
     """
     :param x: shape [H, W]
@@ -180,6 +183,7 @@ def pad_circular_nd(x: torch.Tensor, pad: int, dim) -> torch.Tensor:
     #print(x.shape)
     return x
 
+@export
 class iLogits(nn.Module):
     #cnstr = 0.9
     def forward(self,x):
