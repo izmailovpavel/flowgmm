@@ -7,7 +7,7 @@ class SequentialWithAutoInverseAndLogDet(torch.nn.Sequential):
         for module in reversed(self._modules.values()):
             j -=1
             #print(f"Inverting layer{j} with module {module}")
-            assert hasattr(module,'inverse'), f'{module} has no inverse defined'
+            assert hasattr(module,'inverse'), '{} has no inverse defined'.format(module)
             y = module.inverse(y)
         return y
 
@@ -15,7 +15,7 @@ class SequentialWithAutoInverseAndLogDet(torch.nn.Sequential):
         log_det = 0
         for module in self._modules.values():
             #print(module)
-            assert hasattr(module,'logdet'), f'{module} has no logdet defined'
+            assert hasattr(module,'logdet'), '{} has no logdet defined'.format(module)
             log_det += module.logdet()
         return log_det
 

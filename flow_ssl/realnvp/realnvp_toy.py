@@ -4,48 +4,94 @@ import torch
 from torch import nn
 from torch import distributions
 
-#PAVEL: combine this with the CIFAR RealNVP code
+from flow_ssl.invertible.auto_inverse import iSequential
 
-class RealNVP(nn.Module):
-    def __init__(self, nets, nett, masks, prior, device=None):
+class ToyCouplingLayer(nn.Module):
+
+    def __init__(self, in_dim, mid_dim, num_layers, mask):
+        
+        super(ToyCouplingLayer, self).__init__()
+        self.mask = mask
+        self.nets = nn.Sequential(nn.Linear(in_dim, mid_dim),
+                                 nn.ReLU(),
+                                 *self._inner_seq(num_layers, mid_dim),
+                                 nn.Linear(mid_dim, in_dim),
+                                 nn.Tanh(),
+                                 ToyRescale(in_dim))
+        self.nett = nn.Sequential(nn.Linear(in_dim, mid_dim),
+                                 nn.ReLU(),
+                                 *self._inner_seq(num_layers, mid_dim),
+                                 nn.Linear(mid_dim, in_dim))
+                                 
+    @staticmethod
+    def _inner_seq(num_layers, mid_dim):
+        res = []
+        for _ in range(num_layers):
+            res.append(nn.Linear(mid_dim, mid_dim))
+            res.append(nn.ReLU())
+        return res
+
+    def forward(self, x):
+        z = x
+        mz = self.mask * z
+        smz = self.nets(mz)
+        tmz = self.nett(mz)
+        z = mz + (1 - self.mask) * (z * torch.exp(smz) + tmz)
+        self._logdet = (smz * (1-self.mask)).sum(1)
+        return z
+
+    def inverse(self, y):
+        x = y
+        mx = self.mask * x
+        tmx = self.nett(mx)
+        smx = self.nets(mx)
+        x = mx + (1 - self.mask) * ((x - tmx) * torch.exp(-smx))
+        return x
+
+    def logdet(self):
+        return self._logdet
+
+
+class ToyRescale(nn.Module):
+    def __init__(self, D):
+        super(ToyRescale, self).__init__()
+        self.weight = nn.Parameter(torch.ones(D))
+
+    def forward(self, x):
+        x = self.weight * x
+        return x
+
+
+class ToyRealNVPBase(nn.Module):
+    def __init__(self, masks, in_dim, mid_dim, num_layers):
         super().__init__()
 
-        self.prior = prior
-        self.mask = nn.Parameter(masks, requires_grad=False)
-        self.t = torch.nn.ModuleList([nett() for _ in range(len(masks))])
-        self.s = torch.nn.ModuleList([nets() for _ in range(len(masks))])
+        self.masks = nn.Parameter(masks, requires_grad=False)
+        self.body = iSequential(*[
+                        ToyCouplingLayer(in_dim, mid_dim, num_layers, mask)
+                        for mask in self.masks
+                    ])
+        
+    
+    def forward(self, x):
+        return self.body(x)
 
-        self.to(device)
-        self.device = device
+    def logdet(self):
+        return self.body.logdet()
 
-    def g(self, z):
-        x = z
-        for i in reversed(range(len(self.mask))):
-            mx = self.mask[i] * x
-            tmx = self.t[i](mx)
-            smx = self.s[i](mx)
-            x = mx + (1 - self.mask[i]) * ((x - tmx) * torch.exp(-smx))
-        return x
+    def inverse(self, z):
+        return self.body.inverse(z)
 
-    def f(self, x):
-        z = x
-        log_det_J = 0
-        for i in range(len(self.mask)):
-            mz = self.mask[i] * z
-            smz = self.s[i](mz)
-            tmz = self.t[i](mz)
-            z = mz + (1 - self.mask[i]) * (z * torch.exp(smz) + tmz)
-            if x.dim() == 2:
-                log_det_J += (smz * (1-self.mask[i])).sum(1)
+
+class ToyRealNVP(ToyRealNVPBase):
+
+    def __init__(self, in_dim=2, num_coupling_layers=6, mid_dim=256, 
+                 num_layers=2):
+        d = in_dim // 2
+        masks = torch.zeros(num_coupling_layers, in_dim)
+        for i in range(masks.size(0)):
+            if i % 2:
+                masks[i, :d] = 1.
             else:
-                log_det_J += (smz * (1-self.mask[i])).sum(1, 2, 3)
-        return z, log_det_J
-
-    def log_prob(self, x, *args, **kwargs):
-        z, log_det_J = self.f(x)
-        return self.prior.log_prob(z, *args, **kwargs) + log_det_J
-
-    def sample(self, bs=1):
-        z = self.prior.sample(torch.Size([bs]))
-        x = self.g(z)
-        return x
+                masks[i, d:] = 1. 
+        super(ToyRealNVP, self).__init__(masks, in_dim, mid_dim, num_layers)
