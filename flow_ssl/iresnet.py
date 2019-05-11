@@ -10,11 +10,10 @@ from oil.architectures.parts import ResBlock,conv2d
 from .blocks import ConcatResBlock,ODEBlock,RNNBlock
 from .blocks import ConcatBottleBlock,BezierResBlock
 from .downsample import SqueezeLayer,split,merge,padChannels,keepChannels
-from .clipped_BN import MeanOnlyBN, iBN
 #from torch.nn.utils import spectral_norm
 from .auto_inverse import iSequential
-from .spectral_norm import SN
-
+from .normalizations import SN,MeanOnlyBN,iBn
+from .parts import Join,addZslot,Id,both
 
 # def conv2d(in_channels,out_channels,kernel_size=3,dilation=1,**kwargs):
 #     """ Wraps nn.Conv2d and CoordConv, padding is set to same
@@ -108,31 +107,6 @@ def jvp(x,y,v,retain_graph=True):
         vJ = torch.autograd.grad(y,x,v,create_graph=retain_graph,retain_graph=retain_graph)[0]
     return vJ
 
-class addZslot(nn.Module):
-    def __init__(self):
-        super().__init__()
-    def forward(self,x):
-        return x,[]
-    def inverse(self,output):
-        x,z = output
-        assert not z, "nonempty z received"
-        return x
-    def logdet(self):
-        return 0
-
-class Join(nn.Module):
-    def __init__(self):
-        super().__init__()
-    def forward(self,x):
-        y,z = x
-        z.append(y)
-        return z
-    def inverse(self,z):
-        #y = z.pop()
-        z,y = z[:-1],z[-1]
-        return y,z
-    def logdet(self):
-        return 0
 
 def BNrelu(channels,gn=False):
     norm_layer = nn.GroupNorm(channels//16,channels) if gn else nn.BatchNorm2d(channels)
@@ -142,7 +116,7 @@ def BN(channels,gn=False):
     return nn.GroupNorm(channels//16,channels) if gn else nn.BatchNorm2d(channels)
 
 
-@export
+
 class aResnet(nn.Module,metaclass=Named):
     def __init__(self,num_classes=10,k=64,gn=False):
         super().__init__()
@@ -206,7 +180,7 @@ def unflatten_like(vector, likeTensorList):
         i+=n
     return outList
 
-@export
+
 class iResnet(nn.Module,metaclass=Named):
     def __init__(self,num_classes=10,k=32,sigma=1.):
         super().__init__()
@@ -287,7 +261,7 @@ class iResnet(nn.Module,metaclass=Named):
     #         if isinstance(m, SN):
     #             logger.add_scalars('info',{'Sigma_{}'.format(name):m._s.cpu().data},step)
 
-@export
+
 class iResnetLarge(iResnet):
     def __init__(self,num_classes=10,k=32,sigma=1.,block_size=4):
         super().__init__()
@@ -312,7 +286,7 @@ class iResnetLarge(iResnet):
             Expression(lambda u:u.mean(-1).mean(-1)),
             nn.Linear(8*k,num_classes)
         )
-@export
+
 class iResnetLargeV2(nn.Module,metaclass=Named):
     def __init__(self,num_classes=10,k=64,sigma=1.,block_size=4):
         super().__init__()

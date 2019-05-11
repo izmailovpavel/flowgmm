@@ -1,5 +1,7 @@
 import torch
+from ..utils import export
 
+@export
 class iSequential(torch.nn.Sequential):
 
     def inverse(self,y):
@@ -19,27 +21,7 @@ class iSequential(torch.nn.Sequential):
             log_det += module.logdet()
         return log_det
 
-def iConvBNelu(ch):
-    return iSequential(iConv2d(ch,ch),iSLReLU(.1))#iSequential(iConv2d(ch,ch),iBN(ch),iSLReLU())
-
-def passThrough(*layers):
-    return iSequential(*[both(layer,I) for layer in layers])
-
-def ConvBNrelu(in_channels,out_channels,stride=1):
-    return nn.Sequential(
-        nn.Conv2d(in_channels,out_channels,3,padding=1,stride=stride),
-        nn.BatchNorm2d(out_channels),
-        nn.ReLU()
-    )
-
-def CircBNrelu(in_channels,out_channels):
-    return nn.Sequential(
-        iConv2d(in_channels,out_channels),
-        nn.BatchNorm2d(out_channels),
-        nn.ReLU()
-    )
-
-
+@export
 class addZslot(nn.Module):
     def __init__(self):
         super().__init__()
@@ -51,7 +33,7 @@ class addZslot(nn.Module):
         return x
     def logdet(self):
         return 0
-
+@export
 class Join(nn.Module):
     def __init__(self):
         super().__init__()
@@ -66,7 +48,7 @@ class Join(nn.Module):
     def logdet(self):
         return 0
 
-
+@export
 class Id(nn.Module):
     def __init__(self):
         super().__init__()
@@ -79,6 +61,7 @@ class Id(nn.Module):
 
 I = Id()
 
+@export
 class both(nn.Module):
     def __init__(self,module1,module2):
         super().__init__()
@@ -92,3 +75,26 @@ class both(nn.Module):
         return self.module1.inverse(y),self.module2.inverse(z_out)
     def logdet(self):
         return self.module1.logdet() + self.module2.logdet()
+
+
+@export
+def passThrough(*layers):
+    return iSequential(*[both(layer,I) for layer in layers])
+
+
+# def iConvBNelu(ch):
+#     return iSequential(iConv2d(ch,ch),iSLReLU(.1))#iSequential(iConv2d(ch,ch),iBN(ch),iSLReLU())
+
+# def ConvBNrelu(in_channels,out_channels,stride=1):
+#     return nn.Sequential(
+#         nn.Conv2d(in_channels,out_channels,3,padding=1,stride=stride),
+#         nn.BatchNorm2d(out_channels),
+#         nn.ReLU()
+#     )
+
+# def CircBNrelu(in_channels,out_channels):
+#     return nn.Sequential(
+#         iConv2d(in_channels,out_channels),
+#         nn.BatchNorm2d(out_channels),
+#         nn.ReLU()
+#     )
