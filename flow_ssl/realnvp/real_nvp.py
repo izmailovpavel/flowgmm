@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 from flow_ssl.realnvp.coupling_layer import CouplingLayer, MaskType
 from flow_ssl.realnvp.utils import squeeze_2x2
+from flow_ssl.invertible.auto_inverse import iSequential
 
 
 class RealNVP(nn.Module):
