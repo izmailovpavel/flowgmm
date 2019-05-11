@@ -6,9 +6,10 @@ import torch.nn as nn
 import numpy as np
 from torch.nn.utils import weight_norm
 from oil.utils.utils import Expression,export,Named
-from oil.architectures.parts import conv2d,ResBlock
-from blocks import ConcatResBlock,ODEBlock,RNNBlock
-from blocks import ConcatBottleBlock,BezierResBlock
+from ..utils import conv2d,ResBlock
+
+from .blocks import ConcatResBlock,ODEBlock,RNNBlock
+from .blocks import ConcatBottleBlock,BezierResBlock
 
 def BNrelu(channels,gn=False):
     norm_layer = nn.GroupNorm(channels//16,channels) if gn else nn.BatchNorm2d(channels)

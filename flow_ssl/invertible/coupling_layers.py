@@ -2,7 +2,6 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 import numpy as np
-#from torch.nn.utils import spectral_norm
 import scipy as sp
 import scipy.sparse
 from .normalizations import pad_circular_nd
