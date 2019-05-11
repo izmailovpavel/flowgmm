@@ -102,12 +102,12 @@ class iSLReLU(nn.Module):
         super().__init__()
     def forward(self,x):
         self._last_x = x
-        y = (x+self.alpha*(torch.sqrt(1+x*x)-1))/(1+self.alpha)
+        y = (x+self.alpha*torch.sqrt(1+x*x))/(1+self.alpha)
         return y
     def inverse(self,y):
         # y if y>0 else log(1+y)
         a = self.alpha
-        b = (1+a)*y + a
+        b = (1+a)*y# + a
         x = (torch.sqrt(a**2 + (a*b)**2-a**4) - b)/(a**2-1)
         #assert not torch.isnan(x).any(), "Nans in iSLReLU"
         return x
@@ -306,7 +306,7 @@ def CircBNrelu(in_channels,out_channels):
 
 
 class DegredationTester(nn.Module):
-    def __init__(self, num_classes=10,k=128,circ=False,slrelu=False,ds='max'):
+    def __init__(self, num_classes=10,k=128,circ=False,slrelu=False,lrelu=None,ds='max'):
         super().__init__()
         self.num_classes = num_classes
         self.k = k
@@ -314,6 +314,7 @@ class DegredationTester(nn.Module):
         conv = lambda c1,c2: iConv2d(c1,c2,circ=circ)
         BN = nn.BatchNorm2d
         relu = iSLReLU if slrelu else nn.ReLU
+        if lrelu is not None: relu = lambda: nn.LeakyReLU(lrelu)
         if ds=='max': downsample = nn.MaxPool2d(2)
         elif ds=='checkerboard': downsample = SqueezeLayer(2)
         elif ds=='nn': downsample = NNdownsample()

@@ -1,12 +1,12 @@
 import torch
 import torch.nn as nn
-from oil.utils.utils import Expression,export,Named
+#from oil.utils.utils import Expression,export,Named
 import torch.nn.functional as F
 import numpy as np
 #https://github.com/rtqichen/ffjord/blob/master/lib/layers/squeeze.py
 
 
-@export
+#@export
 class SqueezeLayer(nn.Module):
     def __init__(self, downscale_factor):
         super().__init__()
