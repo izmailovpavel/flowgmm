@@ -4,8 +4,7 @@ from torch.nn import Parameter
 import torch.nn.functional as F
 import torch.nn as nn
 import numpy as np
-from oil.utils.utils import Expression,export,Named
-from oil.architectures.parts import conv2d
+from ..utils import conv2d,export
 import torchcontrib.nn.functional as contrib
 from torchdiffeq import odeint_adjoint as odeint
 
