@@ -1,1 +1,1 @@
-#from .real_nvp import RealNVP
+from .realnvp import RealNVP

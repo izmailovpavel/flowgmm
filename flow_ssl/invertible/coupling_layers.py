@@ -7,6 +7,8 @@ from oil.architectures.parts import ResBlock,conv2d
 import scipy as sp
 import scipy.sparse
 from .spectral_norm import pad_circular_nd
+from enum import IntEnum
+
 
 class iConv2d(nn.Module):
     """ wraps conv2d in a module with an inverse function """
@@ -34,6 +36,7 @@ class iConv2d(nn.Module):
         #     assert False, "Nans encountered in iconv2d"
         return x
 
+
 class iConv1x1(nn.Conv2d):
     def __init__(self, channels):
         super().__init__(channels,channels,1)
@@ -53,3 +56,5 @@ class iConv1x1(nn.Conv2d):
     def forward(self, x):
         self._input_shape = x.shape
         return F.conv2d(x,self.weight,self.bias)
+
+
