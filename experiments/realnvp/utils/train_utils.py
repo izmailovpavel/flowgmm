@@ -76,7 +76,6 @@ def sample(net, prior, batch_size, cls, device, sample_shape):
         else:
             z = prior.sample((batch_size,))
         x = net.module.inverse(z)
-        x = torch.sigmoid(x)
 
         return x
 
