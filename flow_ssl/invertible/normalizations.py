@@ -6,7 +6,8 @@ from torch.nn.functional import normalize
 from torch.nn.parameter import Parameter
 import numpy as np
 import torch.nn.functional as F
-
+from ..utils import export
+@export
 class MeanOnlyBN(nn.BatchNorm2d):
     # See https://github.com/vacancy/Synchronized-BatchNorm-PyTorch/issues/14
     def __init__(self, *args,**kwargs):
@@ -55,7 +56,7 @@ class MeanOnlyBN(nn.BatchNorm2d):
 
         return output.view(channels, batchsize, height, width).permute(1, 0, 2, 3).contiguous()
 
-
+@export
 class iBN(nn.BatchNorm2d):
     # See https://github.com/vacancy/Synchronized-BatchNorm-PyTorch/issues/14
     def __init__(self, *args,**kwargs):
@@ -129,6 +130,7 @@ def singularValues(kernel,input_shape):
     return np.linalg.svd(transforms,compute_uv=False)
 
 #def pytorchSingularValues(kernel,input_shape):
+@export
 def pad_circular_nd(x: torch.Tensor, pad: int, dim) -> torch.Tensor:
     """
     :param x: shape [H, W]
@@ -160,7 +162,7 @@ def flip(x, dim):
 
 def batchwise_l2normalize(x):
     return x/x.pow(2).sum(-1).sum(-1).sum(-1).sqrt()[:,None,None,None]
-
+@export
 class SN(nn.Module):
     def __init__(self,module,n_power_iterations=1,eps=1e-12):
         super().__init__()
