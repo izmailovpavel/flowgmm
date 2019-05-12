@@ -70,13 +70,11 @@ def sample(net, prior, batch_size, cls, device, sample_shape):
         batch_size (int): Number of samples to generate.
         device (torch.device): Device to use.
     """
-    #z = torch.randn((batch_size, 3, 32, 32), dtype=torch.float32, device=device)
     with torch.no_grad():
         if cls is not None:
             z = prior.sample((batch_size,), gaussian_id=cls)
         else:
             z = prior.sample((batch_size,))
-        #z = z.reshape((batch_size, *sample_shape))
         x = net.module.inverse(z)
         x = torch.sigmoid(x)
 

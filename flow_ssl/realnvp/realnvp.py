@@ -11,7 +11,7 @@ from flow_ssl.invertible.downsample import iLogits
 from flow_ssl.invertible.downsample import keepChannels
 from flow_ssl.invertible.downsample import SqueezeLayer
 from flow_ssl.invertible.parts import addZslot
-from flow_ssl.invertible.parts import Join
+from flow_ssl.invertible.parts import FlatJoin
 from flow_ssl.invertible.parts import passThrough
 
 
@@ -38,7 +38,7 @@ class RealNVP(nn.Module):
             in_channels *= 2
             mid_channels *= 2
 
-        layers.append(Join())
+        layers.append(FlatJoin())
         self.body = iSequential(*layers)
         #print(layers)
 

@@ -65,7 +65,6 @@ def test(epoch, net, testloader, device, loss_fn, num_samples, writer):
                 progress_bar.set_postfix(loss=loss_meter.avg,
                                      bpd=utils.bits_per_dim(x, loss_meter.avg))
                 progress_bar.update(x.size(0))
-                break
 
     writer.add_scalar("test/loss", loss_meter.avg, epoch)
     writer.add_scalar("test/bpd", utils.bits_per_dim(x, loss_meter.avg), epoch)
@@ -82,7 +81,6 @@ parser.add_argument('--logdir', type=str, default=None, required=True, metavar='
 parser.add_argument('--ckptdir', type=str, default=None, required=True, metavar='PATH',
                 help='path to ckpt directory (default: None)')
 parser.add_argument('--batch_size', default=64, type=int, help='Batch size')
-#parser.add_argument('--benchmark', action='store_true', help='Turn on CUDNN benchmarking')
 parser.add_argument('--gpu_ids', default='[0]', type=eval, help='IDs of GPUs to use')
 parser.add_argument('--lr', default=1e-3, type=float, help='Learning rate')
 parser.add_argument('--max_grad_norm', type=float, default=100., help='Max gradient norm for clipping')
@@ -168,18 +166,18 @@ param_groups = utils.get_param_groups(net, args.weight_decay, norm_suffix='weigh
 optimizer = optim.Adam(param_groups, lr=args.lr)
 
 for epoch in range(start_epoch, start_epoch + args.num_epochs):
-    #train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm, writer)
+    train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm, writer)
     test(epoch, net, testloader, device, loss_fn, args.num_samples, writer)
 
-    ## Save checkpoint
-    #if (epoch % args.save_freq == 0):
-    #    print('Saving...')
-    #    state = {
-    #        'net': net.state_dict(),
-    #        'epoch': epoch,
-    #    }
-    #    os.makedirs(args.ckptdir, exist_ok=True)
-    #    torch.save(state, os.path.join(args.ckptdir, str(epoch)+'.pt'))
+    # Save checkpoint
+    if (epoch % args.save_freq == 0):
+        print('Saving...')
+        state = {
+            'net': net.state_dict(),
+            'epoch': epoch,
+        }
+        os.makedirs(args.ckptdir, exist_ok=True)
+        torch.save(state, os.path.join(args.ckptdir, str(epoch)+'.pt'))
 
     # Save samples and data
     images = utils.sample(net, loss_fn.prior, args.num_samples,
