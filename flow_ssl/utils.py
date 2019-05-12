@@ -14,16 +14,10 @@ def export(fn):
         mod.__all__ = [fn.__name__]
     return fn
 
-def CoordConv(*args,**kwargs):
-    raise NotImplementedError
-
-@export
-def conv2d(in_channels,out_channels,kernel_size=3,coords=False,dilation=1,**kwargs):
-    """ Wraps nn.Conv2d and CoordConv, padding is set to same
-        and coords=True can be specified to get additional coordinate in_channels"""
-    assert 'padding' not in kwargs, "assumed to be padding = same "
-    same = (kernel_size//2)*dilation
-    if coords: 
-        return CoordConv(in_channels,out_channels,kernel_size,padding=same,dilation=dilation,**kwargs)
-    else: 
-        return nn.Conv2d(in_channels,out_channels,kernel_size,padding=same,dilation=dilation,**kwargs)
+class Expression(nn.Module):
+    def __init__(self, func):
+        super(Expression, self).__init__()
+        self.func = func
+        
+    def forward(self, x):
+        return self.func(x)

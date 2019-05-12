@@ -1,3 +1,4 @@
 *.pdf
 __pycache__
 runs
+.ipynb_checkpoints
