@@ -91,7 +91,7 @@ class Join(nn.Module):
 
 @export
 def FlatJoin():
-    return iSequential(Join,Flatten)
+    return iSequential(Join(),Flatten())
 
 @export
 class Id(nn.Module):
