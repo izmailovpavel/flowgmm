@@ -172,7 +172,7 @@ def pad_circular_nd(x: torch.Tensor, pad: int, dim) -> torch.Tensor:
 
     for d in dim:
         if d >= len(x.shape):
-            raise IndexError(f"dim {d} out of range")
+            raise IndexError("dim {} out of range".format(d))
 
         idx = tuple(slice(0, None if s != d else pad, 1) for s in range(len(x.shape)))
         x = torch.cat([x, x[idx]], dim=d)

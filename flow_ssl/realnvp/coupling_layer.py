@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from enum import IntEnum
-from flow_ssl.resnet import ResNet
+from flow_ssl.resnet_realnvp import ResNet
 from flow_ssl.realnvp.utils import checkerboard_mask
 
 
@@ -11,7 +11,7 @@ class MaskType(IntEnum):
     CHANNEL_WISE = 1
 
 
-class MaskChannelWise:
+class MaskChannelwise:
     def __init__(self, reverse_mask):
         self.type = MaskType.CHANNEL_WISE
         self.reverse_mask = reverse_mask

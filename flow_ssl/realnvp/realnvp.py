@@ -6,10 +6,12 @@ from flow_ssl.realnvp.coupling_layer import CouplingLayer
 from flow_ssl.realnvp.coupling_layer import MaskCheckerboard
 from flow_ssl.realnvp.coupling_layer import MaskChannelwise
 
-from flow_ssl.invertible.auto_inverse import iSequential
+from flow_ssl.invertible import iSequential
 from flow_ssl.invertible.downsample import iLogits
-from flow_ssl.invertible.parts import keepChannels
+from flow_ssl.invertible.downsample import keepChannels
+from flow_ssl.invertible.downsample import SqueezeLayer
 from flow_ssl.invertible.parts import addZslot
+from flow_ssl.invertible.parts import Join
 from flow_ssl.invertible.parts import passThrough
 
 
@@ -18,10 +20,10 @@ class RealNVP(nn.Module):
     def __init__(self, num_scales=2, in_channels=3, mid_channels=64, num_blocks=8):
         super(RealNVP, self).__init__()
         
-        layers = [addZslot(), passThrough(iLogits)]
+        layers = [addZslot(), passThrough(iLogits())]
 
         for scale in range(num_scales):
-            in_couplings = *_threecouplinglayers(in_channels, mid_channels, num_blocks, MaskCheckerboard)
+            in_couplings = self._threecouplinglayers(in_channels, mid_channels, num_blocks, MaskCheckerboard)
             layers.append(passThrough(*in_couplings))
 
             if scale == num_scales - 1:
@@ -29,19 +31,19 @@ class RealNVP(nn.Module):
                     CouplingLayer(in_channels, mid_channels, num_blocks, MaskCheckerboard(reverse_mask=True))))
             else:
                 layers.append(passThrough(SqueezeLayer(2)))
-                out_couplings = _threecouplinglayers(4 * in_channels, 2 * mid_channels, num_blocks, MaskChannelWise)
+                out_couplings = self._threecouplinglayers(4 * in_channels, 2 * mid_channels, num_blocks, MaskChannelwise)
                 layers.append(passThrough(*out_couplings))
                 layers.append(keepChannels(2 * in_channels))
-
             
             in_channels *= 2
             mid_channels *= 2
+
+        layers.append(Join())
         self.body = iSequential(*layers)
-        print(layers)
+        #print(layers)
 
     def forward(self,x):
-        z = self.body(x)
-        return self.head(z)
+        return self.body(x)
 
     def logdet(self):
         return self.body.logdet()

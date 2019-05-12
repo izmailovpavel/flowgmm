@@ -122,7 +122,6 @@ writer = SummaryWriter(log_dir=args.logdir)
 device = 'cuda' if torch.cuda.is_available() and len(args.gpu_ids) > 0 else 'cpu'
 start_epoch = 0
 
-# Note: No normalization applied, since RealNVP expects inputs in (0, 1).
 if args.dataset.lower() == "mnist":
     img_shape = (1, 28, 28)
     transform_train = transforms.Compose([

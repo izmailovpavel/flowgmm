@@ -33,7 +33,8 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, wr
         for x, _ in trainloader:
             x = x.to(device)
             optimizer.zero_grad()
-            z, sldj = net(x, reverse=False)
+            z = net(x)
+            sldj = net.module.logdet()
             loss = loss_fn(z, sldj=sldj)
             loss_meter.update(loss.item(), x.size(0))
 
@@ -48,23 +49,6 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, wr
     writer.add_scalar("train/bpd", utils.bits_per_dim(x, loss_meter.avg), epoch)
 
 
-def sample(net, prior, batch_size, device):
-    """Sample from RealNVP model.
-
-    Args:
-        net (torch.nn.DataParallel): The RealNVP model wrapped in DataParallel.
-        batch_size (int): Number of samples to generate.
-        device (torch.device): Device to use.
-    """
-    #z = torch.randn((batch_size, 3, 32, 32), dtype=torch.float32, device=device)
-    with torch.no_grad():
-        z = prior.sample((batch_size,))
-        z = z.reshape((batch_size, 3, 32, 32))
-        x, _ = net(z, reverse=True)
-        x = torch.sigmoid(x)
-        return x
-
-
 def test(epoch, net, testloader, device, loss_fn, num_samples, writer):
     net.eval()
     loss_meter = utils.AverageMeter()
@@ -73,7 +57,8 @@ def test(epoch, net, testloader, device, loss_fn, num_samples, writer):
         with tqdm(total=len(testloader.dataset)) as progress_bar:
             for x, _ in testloader:
                 x = x.to(device)
-                z, sldj = net(x, reverse=False)
+                z = net(x)
+                sldj = net.logdet()
                 loss = loss_fn(z, sldj=sldj)
                 loss_meter.update(loss.item(), x.size(0))
 
@@ -85,8 +70,10 @@ def test(epoch, net, testloader, device, loss_fn, num_samples, writer):
     writer.add_scalar("test/bpd", utils.bits_per_dim(x, loss_meter.avg), epoch)
 
 
-parser = argparse.ArgumentParser(description='RealNVP on CIFAR-10')
+parser = argparse.ArgumentParser(description='RealNVP')
 
+parser.add_argument('--dataset', type=str, default="CIFAR10", required=True, metavar='DATA',
+                help='Dataset name (default: CIFAR10)')
 parser.add_argument('--data_path', type=str, default=None, required=True, metavar='PATH',
                 help='path to datasets location (default: None)')
 parser.add_argument('--logdir', type=str, default=None, required=True, metavar='PATH',
@@ -104,6 +91,7 @@ parser.add_argument('--num_workers', default=8, type=int, help='Number of data l
 parser.add_argument('--resume', '-r', action='store_true', help='Resume from checkpoint')
 parser.add_argument('--weight_decay', default=5e-5, type=float,
                     help='L2 regularization (only applied to the weight norm scale factors)')
+parser.add_argument('--use_validation', action='store_true', help='Use trainable validation set')
 
 parser.add_argument('--save_freq', default=25, type=int, 
                     help='frequency of saving ckpts')
@@ -121,29 +109,39 @@ writer = SummaryWriter(log_dir=args.logdir)
 device = 'cuda' if torch.cuda.is_available() and len(args.gpu_ids) > 0 else 'cpu'
 start_epoch = 0
 
-# Note: No normalization applied, since RealNVP expects inputs in (0, 1).
-transform_train = transforms.Compose([
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor()
-])
+if args.dataset.lower() == "mnist":
+    img_shape = (1, 28, 28)
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(28, padding=4),
+        transforms.ToTensor()
+    ])
+elif args.dataset.lower() in ["cifar10", "svhn"]:
+    img_shape = (3, 32, 32)
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor()
+    ])
+else:
+    raise ValueError("Unsupported dataset "+args.dataset)
 
 transform_test = transforms.Compose([
     transforms.ToTensor()
 ])
 
 trainloader, testloader, _ = make_sup_data_loaders(
-        "CIFAR10", 
         args.data_path, 
         args.batch_size, 
         args.num_workers, 
         transform_train, 
         transform_test, 
-        use_validation=False, 
-        shuffle_train=True)
+        use_validation=args.use_validation,
+        shuffle_train=True,
+        dataset=args.dataset.lower())
 
 # Model
 print('Building model...')
-net = RealNVP(num_scales=2, in_channels=3, mid_channels=64, num_blocks=8)
+net = RealNVP(num_scales=2, in_channels=img_shape[0], mid_channels=64, num_blocks=8)
 net = net.to(device)
 if device == 'cuda':
     net = torch.nn.DataParallel(net, args.gpu_ids)
@@ -158,7 +156,8 @@ if args.resume:
     best_loss = checkpoint['test_loss']
     start_epoch = checkpoint['epoch']
 
-D = 3 * 32 * 32
+D = np.prod(img_shape)
+D = int(D)
 prior = distributions.MultivariateNormal(torch.zeros(D).to(device),
                                                      torch.eye(D).to(device))
 loss_fn = FlowLoss(prior)
@@ -168,7 +167,7 @@ param_groups = utils.get_param_groups(net, args.weight_decay, norm_suffix='weigh
 optimizer = optim.Adam(param_groups, lr=args.lr)
 
 for epoch in range(start_epoch, start_epoch + args.num_epochs):
-    #train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm, writer)
+    train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm, writer)
     test(epoch, net, testloader, device, loss_fn, args.num_samples, writer)
 
     # Save checkpoint
@@ -182,7 +181,8 @@ for epoch in range(start_epoch, start_epoch + args.num_epochs):
         torch.save(state, os.path.join(args.ckptdir, str(epoch)+'.pt'))
 
     # Save samples and data
-    images = sample(net, prior, args.num_samples, device)
+    images = utils.sample(net, loss_fn.prior, args.num_samples,
+                              cls=None, device=device, sample_shape=img_shape)
     writer.add_image("samples/unsup", images)
     os.makedirs(os.path.join(args.ckptdir, 'samples'), exist_ok=True)
     images_concat = torchvision.utils.make_grid(images, nrow=int(args.num_samples ** 0.5), padding=2, pad_value=255)
