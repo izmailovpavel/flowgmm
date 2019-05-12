@@ -56,14 +56,13 @@ def flatten(tensorList):
 #         i+=n
 #     return outList
 
+
 @export
-class Join(nn.Module):
+class Flatten(nn.Module):
     def __init__(self):
         super().__init__()
-    def forward(self,x):
-        y,z = x
-        z.append(y)
-        bs = y.shape[0]
+    def forward(self,z):
+        bs = z[-1].shape[0]
         self._shapes = [zi.shape[1:] for zi in z]
         return torch.cat([zi.view(bs,-1) for zi in z],dim=1)
 
@@ -72,10 +71,27 @@ class Join(nn.Module):
         dimensions = [np.prod(shape) for shape in self._shapes]
         z = [flat_part.view((bs, *shape)) for (flat_part, shape) in 
              zip(torch.split(z_flat,dimensions,dim=1),self._shapes)]
+        return z
+    def logdet(self):
+        return 0
+
+@export
+class Join(nn.Module):
+    def __init__(self):
+        super().__init__()
+    def forward(self,x):
+        y,z = x
+        z.append(y)
+        return z
+    def inverse(self,z):
         z,y = z[:-1],z[-1]
         return y,z
     def logdet(self):
         return 0
+
+@export
+def FlatJoin():
+    return iSequential(Join,Flatten)
 
 @export
 class Id(nn.Module):
