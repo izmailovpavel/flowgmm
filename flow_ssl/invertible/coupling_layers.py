@@ -5,7 +5,8 @@ import numpy as np
 import scipy as sp
 import scipy.sparse
 from .normalizations import pad_circular_nd
-from ..utils import export, conv2d
+from flow_ssl.utils import export
+from flow_ssl.conv_parts import conv2d
 
 @export
 class iConv2d(nn.Module):

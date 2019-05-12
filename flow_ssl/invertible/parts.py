@@ -64,12 +64,14 @@ class Join(nn.Module):
         y,z = x
         z.append(y)
         bs = y.shape[0]
-        self._shapes = [zi.shape for zi in z]
+        self._shapes = [zi.shape[1:] for zi in z]
         return torch.cat([zi.view(bs,-1) for zi in z],dim=1)
+
     def inverse(self,z_flat):
-        #y = z.pop()
-        dimensions = [np.prod(shape[1:]) for shape in self._shapes]
-        z = [flat_part.view(shape) for flat_part,shape in zip(torch.split(z_flat,dimensions,dim=1),self._shapes)]
+        bs = z_flat.shape[0]
+        dimensions = [np.prod(shape) for shape in self._shapes]
+        z = [flat_part.view((bs, *shape)) for (flat_part, shape) in 
+             zip(torch.split(z_flat,dimensions,dim=1),self._shapes)]
         z,y = z[:-1],z[-1]
         return y,z
     def logdet(self):

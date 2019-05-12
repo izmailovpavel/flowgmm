@@ -24,7 +24,7 @@ def get_class_means(net, trainloader, shape):
         with tqdm(total=len(trainloader.dataset)) as progress_bar:
             n_batches = len(trainloader)
             for x, y in trainloader:
-                z, _ = net(x, reverse=False)
+                z, _ = net(x)
                 for i in range(10):
                     means[i] += z[y == i].sum(dim=0).cpu() 
                     #PAVEL: not the right way of computing means
@@ -76,8 +76,8 @@ def sample(net, prior, batch_size, cls, device, sample_shape):
             z = prior.sample((batch_size,), gaussian_id=cls)
         else:
             z = prior.sample((batch_size,))
-        z = z.reshape((batch_size, *sample_shape))
-        x, _ = net(z, reverse=True)
+        #z = z.reshape((batch_size, *sample_shape))
+        x = net.module.inverse(z)
         x = torch.sigmoid(x)
 
         return x

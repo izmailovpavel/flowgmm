@@ -91,7 +91,7 @@ class CouplingLayer(nn.Module):
         return x
 
     def inverse(self, y):
-        s, t, x_id, x_change = self._get_st(x)
+        s, t, x_id, x_change = self._get_st(y)
         inv_exp_s = s.mul(-1).exp()
         if torch.isnan(inv_exp_s).any():
             raise RuntimeError('Scale factor has NaN entries')

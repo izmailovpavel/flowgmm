@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ..utils import export,Expression
-from ..invertible import iConv2d
+from flow_ssl.utils import export,Expression
+#from ..invertible import iConv2d
 
 def CoordConv(*args,**kwargs):
     raise NotImplementedError
@@ -27,13 +27,13 @@ def ConvBNrelu(in_channels,out_channels,stride=1):
         nn.ReLU()
     )
 
-@export
-def CircBNrelu(in_channels,out_channels):
-    return nn.Sequential(
-        iConv2d(in_channels,out_channels),
-        nn.BatchNorm2d(out_channels),
-        nn.ReLU()
-    )
+#@export
+#def CircBNrelu(in_channels,out_channels):
+#    return nn.Sequential(
+#        iConv2d(in_channels,out_channels),
+#        nn.BatchNorm2d(out_channels),
+#        nn.ReLU()
+#    )
 
 @export
 class ResBlock(nn.Module):
