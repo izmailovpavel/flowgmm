@@ -37,7 +37,8 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, wr
             x = x.to(device)
             y = y.to(device)
             optimizer.zero_grad()
-            z, sldj = net(x, reverse=False)
+            z = net(x)
+            sldj = net.module.logdet()
 
             logits = loss_fn.prior.class_logits(z.reshape((len(z), -1)))
             loss_nll = F.cross_entropy(logits, y)

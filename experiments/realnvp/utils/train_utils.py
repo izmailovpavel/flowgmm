@@ -93,7 +93,8 @@ def test_classifier(epoch, net, testloader, device, loss_fn, writer=None):
             for x, y in testloader:
                 x = x.to(device)
                 y = y.to(device)
-                z, sldj = net(x, reverse=False)
+                z = net(x)
+                sldj = net.module.logdet()
                 loss = loss_fn(z, y=y, sldj=sldj)
                 loss_meter.update(loss.item(), x.size(0))
                 jaclogdet_meter.update(sldj.mean().item(), x.size(0))

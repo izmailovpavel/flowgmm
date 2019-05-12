@@ -15,7 +15,7 @@ def BNrelu(channels,gn=False):
     norm_layer = nn.GroupNorm(channels//16,channels) if gn else nn.BatchNorm2d(channels)
     return nn.Sequential(nn.ReLU(),norm_layer)
 
-@export
+
 class SmallResnet(nn.Module,metaclass=Named):
     def __init__(self,num_classes=10,k=64,gn=False,block_size=4):
         super().__init__()
@@ -34,7 +34,7 @@ class SmallResnet(nn.Module,metaclass=Named):
     def forward(self,x):
         return self.net(x)
 
-@export
+
 class LongResnet(nn.Module,metaclass=Named):
     def __init__(self,num_classes=10,k=64,gn=False,block_size=12):
         super().__init__()
@@ -51,7 +51,7 @@ class LongResnet(nn.Module,metaclass=Named):
     def forward(self,x):
         return self.net(x)
 
-@export
+
 class ODEResnet(nn.Module,metaclass=Named):
     def __init__(self,num_classes=10,k=64,gn=False):
         super().__init__()
@@ -72,7 +72,7 @@ class ODEResnet(nn.Module,metaclass=Named):
             if isinstance(m, ODEBlock):
                 logger.add_scalars('info',{'nfe{}'.format(name):m.nfe},step)
 
-@export
+
 class BezierODE(nn.Module,metaclass=Named):
     def __init__(self,num_classes=10,k=64,gn=False,block_size=12):
         super().__init__()
@@ -95,7 +95,7 @@ class BezierODE(nn.Module,metaclass=Named):
                 logger.add_scalars('info',{'nfe{}'.format(name):m.nfe},step)
 
 
-@export
+
 class SplitODEResnet(nn.Module,metaclass=Named):
     def __init__(self,num_classes=10,k=64,gn=False,block_size=4):
         super().__init__()
@@ -118,7 +118,7 @@ class SplitODEResnet(nn.Module,metaclass=Named):
             if isinstance(m, ODEBlock):
                 logger.add_scalars('info',{'nfe{}'.format(name):m.nfe},step)
 
-@export
+
 class RNNResnet(nn.Module,metaclass=Named):
     def __init__(self,num_classes=10,k=64,gn=False,block_size=12):
         super().__init__()
@@ -135,7 +135,7 @@ class RNNResnet(nn.Module,metaclass=Named):
     def forward(self,x):
         return self.net(x)
 
-@export
+
 class RNNBottle(nn.Module,metaclass=Named):
     def __init__(self,num_classes=10,k=64,gn=False,block_size=12):
         super().__init__()
@@ -152,7 +152,7 @@ class RNNBottle(nn.Module,metaclass=Named):
         )
     def forward(self,x):
         return self.net(x)
-@export
+
 class BezierRNN(nn.Module,metaclass=Named):
     def __init__(self,num_classes=10,k=64,gn=False,block_size=12):
         super().__init__()
@@ -168,7 +168,7 @@ class BezierRNN(nn.Module,metaclass=Named):
         )
     def forward(self,x):
         return self.net(x)
-@export
+
 class BezierRNNSplit(nn.Module,metaclass=Named):
     def __init__(self,num_classes=10,k=64,gn=False,block_size=4):
         super().__init__()

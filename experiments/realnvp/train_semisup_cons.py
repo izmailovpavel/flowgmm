@@ -59,11 +59,12 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn,
 
             with torch.no_grad():
                 x2 = x2.to(device)
-                z2, _ = net(x2, reverse=False)
+                z2 = net(x2)
                 z2 = z2.detach()
                 pred2 = loss_fn.prior.classify(z2.reshape((len(z2), -1)))
 
-            z1, sldj = net(x1, reverse=False)
+            z1 = net(x1)
+            sldj = net.module.logdet()
 
             z_labeled = z1.reshape((len(z1), -1))
             z_labeled = z_labeled[labeled_mask]

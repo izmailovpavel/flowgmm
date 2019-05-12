@@ -9,7 +9,7 @@ from ..utils import export
 
 @export
 class SqueezeLayer(nn.Module):
-    def __init__(self, downscale_factor):
+    def __init__(self, downscale_factor=2):
         super().__init__()
         self.downscale_factor = downscale_factor
     def forward(self, x):
@@ -185,7 +185,7 @@ def pad_circular_nd(x: torch.Tensor, pad: int, dim) -> torch.Tensor:
 
 @export
 class iLogits(nn.Module):
-    #cnstr = 0.9
+    cnstr = 0.9 # shrink the outputs to .9
     def forward(self,x):
         # assumes x values are between 0 and 1
         z = (x * 255. + torch.rand_like(x)) / 256.
@@ -200,7 +200,7 @@ class iLogits(nn.Module):
         return torch.sigmoid(y)
     def logdet(self):
         y = self._z
-        spl = F.softplus(torch.Tensor([.1]).log()-torch.Tensor([.9]).log()).to(y.device)
+        spl = F.softplus(torch.Tensor([1-self.cnstr]).log()-torch.Tensor([self.cnstr]).log()).to(y.device)
         logdet_output =  (F.softplus(y)+F.softplus(-y)-spl).sum(3).sum(2).sum(1)
         #print(f"ilogits_logdet_shape {logdet_output}")
         return logdet_output
