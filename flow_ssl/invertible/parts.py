@@ -36,44 +36,29 @@ class addZslot(nn.Module):
     def logdet(self):
         return 0
 
-# Converts a list of torch.tensors into a single flat torch.tensor
-def flatten(tensorList):
-    flatList = []
-    for t in tensorList:
-        flatList.append(t.contiguous().view(t.numel()))
-    return torch.cat(flatList)
-
-
-
-# # Takes a flat torch.tensor and unflattens it to a list of torch.tensors
-# #    shaped like likeTensorList
-# def unflatten_like(vector, likeTensorList):
-#     outList = []
-#     i=0
-#     for tensor in likeTensorList:
-#         n = tensor.numel()
-#         outList.append(vector[i:i+n].view(tensor.shape))
-#         i+=n
-#     return outList
-
-
 @export
 class Flatten(nn.Module):
     def __init__(self):
         super().__init__()
     def forward(self,z):
+        # If just a single tensor, early exit with a view
+        if isinstance(z,torch.Tensor):
+            self._shapes = z.shape[1:]
+            return z.view(z.shape[0],-1)
         bs = z[-1].shape[0]
         self._shapes = [zi.shape[1:] for zi in z]
         return torch.cat([zi.view(bs,-1) for zi in z],dim=1)
 
     def inverse(self,z_flat):
-        bs = z_flat.shape[0]
+        bs = z_flat.shape[0] # Early exit for single tensor
+        if isinstance(self._shapes,torch.Size): return z_flat.view((bs,*self._shapes))
         dimensions = [np.prod(shape) for shape in self._shapes]
         z = [flat_part.view((bs, *shape)) for (flat_part, shape) in 
              zip(torch.split(z_flat,dimensions,dim=1),self._shapes)]
         return z
     def logdet(self):
         return 0
+
 
 @export
 class Join(nn.Module):
@@ -91,7 +76,7 @@ class Join(nn.Module):
 
 @export
 def FlatJoin():
-    return iSequential(Join,Flatten)
+    return iSequential(Join(),Flatten())
 
 @export
 class Id(nn.Module):
