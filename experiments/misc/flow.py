@@ -21,7 +21,7 @@ class Flow(Trainer):
     def loss(self, minibatch):
         """ Standard cross-entropy loss """
         x,y = minibatch
-        return self.model.nll(x)/(32*32*3)
+        return self.model.nll(x).mean()/np.prod(x.shape[1:])
 
     def logStuff(self, step, minibatch=None):
         """ Handles Logging and any additional needs for subclasses,
@@ -32,12 +32,13 @@ class Flow(Trainer):
         # except KeyError: pass
         # self.logger.add_scalars('metrics', metrics, step)
         if hasattr(self.model,'sample') and minibatch is not None:
-            with Eval(self.model), torch.no_grad():
-                self.model.nll(minibatch[0])
-                fake_images = self.model.sample(32).cpu().data
+            with Eval(self.model):
+                self.model.nll(minibatch[0]) # Forward through network to populate shape info
+                with torch.no_grad():
+                    fake_images = self.model.sample(32).cpu().data
             img_grid = vutils.make_grid(fake_images, normalize=False,range=(0,1))
             self.logger.add_image('samples', img_grid, step)
-        super().logStuff(step,minibatch)
+        super().logStuff(step,minibatch=None)
 
     def metrics(self,loader):
         nll_func = lambda mb: self.loss(mb).cpu().data.numpy()

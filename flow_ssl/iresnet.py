@@ -5,35 +5,14 @@ import torch.nn.functional as F
 import torch.nn as nn
 import numpy as np
 from torch.nn.utils import weight_norm
-from oil.utils.utils import Expression,export,Named
-from oil.architectures.parts import ResBlock,conv2d
-from .blocks import ConcatResBlock,ODEBlock,RNNBlock
-from .blocks import ConcatBottleBlock,BezierResBlock
-from .downsample import SqueezeLayer,split,merge,padChannels,keepChannels
+from flow_ssl.utils import Expression,export,Named
+from flow_ssl.invertible import SqueezeLayer,padChannels,keepChannels,NNdownsample,iAvgPool2d,RandomPadChannels,Flatten
 #from torch.nn.utils import spectral_norm
-from .auto_inverse import iSequential
-from .normalizations import SN,MeanOnlyBN,iBn
-from .parts import Join,addZslot,Id,both
+from flow_ssl.invertible import iLogits, iBN, MeanOnlyBN, iSequential, passThrough, addZslot, Join, pad_circular_nd,SN
+from flow_ssl.invertible import iConv2d
+from flow_ssl.conv_parts import ResBlock,conv2d
+from flow_ssl.icnn.icnn import FlowNetwork,StandardNormal
 
-# def conv2d(in_channels,out_channels,kernel_size=3,dilation=1,**kwargs):
-#     """ Wraps nn.Conv2d and CoordConv, padding is set to same
-#         and coords=True can be specified to get additional coordinate in_channels"""
-#     assert 'padding' not in kwargs, "assumed to be padding = same "
-#     same = (kernel_size//2)*dilation
-#     return nn.Conv2d(in_channels,out_channels,kernel_size,padding=0,dilation=dilation,**kwargs)
-
-
-# def add_spectral_norm(module):
-#     if isinstance(module,  (nn.ConvTranspose1d,
-#                             nn.ConvTranspose2d,
-#                             nn.ConvTranspose3d,
-#                             nn.Conv1d,
-#                             nn.Conv2d,
-#                             nn.Conv3d)):
-#         spectral_norm(module,dim = 1)
-#         #print("SN on conv layer: ",module)
-#     elif isinstance(module, nn.Linear):
-#         spectral_norm(module,dim = 0)
 
 class iResBlock(nn.Module):
     def __init__(self,in_channels,out_channels,ksize=3,drop_rate=0,stride=1,
@@ -51,7 +30,6 @@ class iResBlock(nn.Module):
             Expression(lambda x: sigma*x),
             nn.Dropout(p=drop_rate)
         )
-        assert in_channels == out_channels
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.inverse_tol = inverse_tol
@@ -64,14 +42,14 @@ class iResBlock(nn.Module):
     def iters_per_reverse(self):
         return self.reverse_iters/self.inverses_evaluated
 
-    def forward(self,inp):
-        x,z = inp
-        y = x + self.net(x)
-        self.x_y = x,y
-        return y,z # autograd will not traverse z_out?
+    def forward(self,x):
+        with torch.enable_grad():
+            if x.is_leaf: x.requires_grad=True
+            y = x + self.net(x)
+            self.x_y = x,y
+        return y
 
-    def inverse(self,output):
-        y,z = output
+    def inverse(self,y):
         self.inverses_evaluated +=1
         with torch.no_grad():
             x_prev = y
@@ -84,7 +62,7 @@ class iResBlock(nn.Module):
                 self.reverse_iters +=1
                 if diff<self.inverse_tol: break
             #print(diff,self.reverse_iters)
-        return x_prev,z
+        return x_prev
 
     def logdet(self):
         assert self.x_y is not None, "logdet called before forwards"
@@ -100,11 +78,34 @@ class iResBlock(nn.Module):
         #print(w.shape)
         #print(f"iResblock logdet {lndet}")
         return lndet
-            
+
+class iBottleneck(iResBlock):
+    def __init__(self,in_channels,channels,ksize=3,drop_rate=0,stride=1,
+                    inverse_tol=1e-7,sigma=1.,**kwargs):
+        super().__init__(in_channels,channels,ksize,drop_rate,stride,
+                    inverse_tol,sigma,**kwargs)
+        self.net = nn.Sequential(
+            #MeanOnlyBN(in_channels),
+            nn.ELU(),
+            SN(conv2d(in_channels,channels,ksize,**kwargs)),
+            #MeanOnlyBN(channels),
+            nn.ELU(),
+            SN(conv2d(channels,channels,1,**kwargs)),
+            #MeanOnlyBN(channels),
+            nn.ELU(),
+            SN(conv2d(channels,in_channels,ksize,**kwargs)),
+            Expression(lambda x: sigma*x),
+            nn.Dropout(p=drop_rate)
+        )
 
 def jvp(x,y,v,retain_graph=True):
     with torch.autograd.enable_grad():
-        vJ = torch.autograd.grad(y,x,v,create_graph=retain_graph,retain_graph=retain_graph)[0]
+        if not (x.requires_grad and  y.requires_grad):
+            print(x.requires_grad)
+            print(x.shape)
+            print(y.requires_grad)
+            print(y.shape)
+        vJ = torch.autograd.grad(y,x,v,create_graph=retain_graph,allow_unused=True)[0]
     return vJ
 
 
@@ -136,125 +137,52 @@ class aResnet(nn.Module,metaclass=Named):
     def forward(self,x):
         return self.net(x)
 
-class Id(nn.Module):
-    def __init__(self):
-        super().__init__()
-    def forward(self,x):
-        return x
-    def inverse(self,y):
-        return y
-    def logdet(self):
-        return 0
-
-I = Id()
-
-class both(nn.Module):
-    def __init__(self,module1,module2):
-        super().__init__()
-        self.module1 = module1
-        self.module2 = module2
-    def forward(self,inp):
-        x,z = inp
-        return self.module1(x),self.module2(z)
-    def inverse(self,output):
-        y,z_out = output
-        return self.module1.inverse(y),self.module2.inverse(z_out)
-    def logdet(self):
-        return self.module1.logdet() + self.module2.logdet()
-
-# Converts a list of torch.tensors into a single flat torch.tensor
-def flatten(tensorList):
-    flatList = []
-    for t in tensorList:
-        flatList.append(t.contiguous().view(t.numel()))
-    return torch.cat(flatList)
-
-# Takes a flat torch.tensor and unflattens it to a list of torch.tensors
-#    shaped like likeTensorList
-def unflatten_like(vector, likeTensorList):
-    outList = []
-    i=0
-    for tensor in likeTensorList:
-        n = tensor.numel()
-        outList.append(vector[i:i+n].view(tensor.shape))
-        i+=n
-    return outList
-
-
-class iResnet(nn.Module,metaclass=Named):
-    def __init__(self,num_classes=10,k=32,sigma=1.):
+@export
+class iResnet(FlowNetwork):
+    def __init__(self,num_classes=10,k=32,sigma=.6):
         super().__init__()
         self.num_classes = num_classes
         self.body = iSequential(
-            padChannels(k-3),
+            iLogits(),
+            RandomPadChannels(k-3),
             addZslot(),
-            both(iBN(k),I),
-            iResBlock(k,k,sigma=sigma),
-            both(SqueezeLayer(2),I),
-            both(iBN(4*k),I),
-            iResBlock(4*k,4*k,sigma=sigma),
+            passThrough(iConv2d(k,k)),
+            passThrough(iBN(k)),
+            passThrough(iResBlock(k,k,sigma=sigma)),
+            passThrough(SqueezeLayer()),
+            passThrough(iBN(4*k)),
+            passThrough(iResBlock(4*k,4*k,sigma=sigma)),
             keepChannels(2*k),
-            both(iBN(2*k),I),
-            iResBlock(2*k,2*k,sigma=sigma),
-            both(SqueezeLayer(2),I),
-            both(iBN(8*k),I),
-            iResBlock(8*k,8*k,sigma=sigma),
+
+            passThrough(iBN(2*k)),
+            passThrough(iResBlock(2*k,2*k,sigma=sigma)),
+            passThrough(SqueezeLayer()),
+            passThrough(iBN(8*k)),
+            passThrough(iResBlock(8*k,8*k,sigma=sigma)),
             keepChannels(4*k),
-            both(iBN(4*k),I),
-            iResBlock(4*k,4*k,sigma=sigma),
-            both(SqueezeLayer(2),I),
-            both(iBN(16*k),I),
-            iResBlock(16*k,16*k,sigma=sigma),
+
+            passThrough(iBN(4*k)),
+            passThrough(iResBlock(4*k,4*k,sigma=sigma)),
+            passThrough(SqueezeLayer()),
+            passThrough(iBN(16*k)),
+            passThrough(iResBlock(16*k,16*k,sigma=sigma)),
             keepChannels(8*k),
-            both(iBN(8*k),I),
-            iResBlock(8*k,8*k,sigma=sigma),
+            passThrough(iBN(8*k)),
+            passThrough(iResBlock(8*k,8*k,sigma=sigma)),
             Join(),
         )
-        self.head = nn.Sequential(
+        self.classifier_head = nn.Sequential(
             BNrelu(8*k),
             Expression(lambda u:u.mean(-1).mean(-1)),
             nn.Linear(8*k,num_classes)
         )
         self.k = k
-    @property
-    def z_shapes(self):
-        # For CIFAR10: starting size = 32x32
-        h = w = 32
-        channels = self.k
-        shapes = []
-        for module in self.body:
-            if isinstance(module,keepChannels):
-                #print(module)
-                channels = 2*channels
-                h //=2
-                w //=2
-                shapes.append((channels,h,w))
-        shapes.append((channels,h,w))
-        return shapes
+        self.flow = iSequential(self.body,Flatten())
+        self.prior = StandardNormal(k*32*32)
 
-    @property
-    def device(self):
-        try: return self._device
-        except AttributeError:
-            self._device = next(self.parameters()).device
-            return self._device
-
-    def forward(self,x):
-        return self.head(self.body(x)[-1])
-    
-    def get_all_z_squashed(self,x):
-        return flatten(self.body(x))
-
-    def logdet(self):
-        return self.body.logdet()
-    
-    def inverse(self,z):
-        return self.body.inverse(z)
-
-    def sample(self,bs=1):
-        z_all = [torch.randn(bs,*shape).to(self.device) for shape in self.z_shapes]
-        return self.inverse(z_all)
-
+    def nll(self,x):
+        x.requires_grad = True
+        return super().nll(x)
     # def log_data(self,logger,step):
     #     for i,child in enumerate(self.body.named_children()):
     #         name,m = child
@@ -262,65 +190,93 @@ class iResnet(nn.Module,metaclass=Named):
     #             logger.add_scalars('info',{'Sigma_{}'.format(name):m._s.cpu().data},step)
 
 
-class iResnetLarge(iResnet):
-    def __init__(self,num_classes=10,k=32,sigma=1.,block_size=4):
+@export
+class iResnetProper(iResnet):
+    def __init__(self,num_classes=10,k=256,sigma=.6):
         super().__init__()
+        num_per_block = 5
         self.num_classes = num_classes
         self.body = iSequential(
-            padChannels(k-3),
-            addZslot(),
-            both(iBN(k),I),
-            *[iResBlock(k,k,sigma=sigma) for _ in range(block_size)],
-            both(SqueezeLayer(2),I),
-            both(iBN(4*k),I),
-            *[iResBlock(4*k,4*k,sigma=sigma) for _ in range(block_size)],
-            both(SqueezeLayer(2),I),
-            both(iBN(16*k),I),
-            iResBlock(16*k,16*k,sigma=sigma),
-            keepChannels(8*k),
-            both(iBN(8*k),I),
-            *[iResBlock(8*k,8*k,sigma=sigma) for _ in range(block_size)],
-        )
-        self.head = nn.Sequential(
-            BNrelu(8*k),
-            Expression(lambda u:u.mean(-1).mean(-1)),
-            nn.Linear(8*k,num_classes)
-        )
+            iLogits(),
+            #iConv2d(3,3),
 
-class iResnetLargeV2(nn.Module,metaclass=Named):
-    def __init__(self,num_classes=10,k=64,sigma=1.,block_size=4):
-        super().__init__()
-        self.num_classes = num_classes
-        self.foot = iSequential(
-            padChannels(k-3),
-            #iConv2d(k,k),
-            addZslot(),
+            #iBN(3),
+            *[iBottleneck(3,k//4,sigma=sigma) for i in range(num_per_block)],
+            NNdownsample(),
+            #iBN(12),
+            *[iBottleneck(12,k//2,sigma=sigma) for i in range(num_per_block)],
+            NNdownsample(),
+            #iBN(48),
+            *[iBottleneck(48,2*k,sigma=sigma) for i in range(num_per_block)],
         )
-        self.body = iSequential(
-            both(iBN(k),I),
-            *[iResBlock(k,k,sigma=sigma) for _ in range(block_size)],
-            keepChannels(k//2),
-            both(SqueezeLayer(2),I),
-            both(iBN(2*k),I),
-            *[iResBlock(2*k,2*k,sigma=sigma) for _ in range(block_size)],
-            keepChannels(k),
-            both(SqueezeLayer(2),I),
-            both(iBN(4*k),I),
-            *[iResBlock(4*k,4*k,sigma=sigma) for _ in range(block_size)],
-            keepChannels(2*k),
-            both(SqueezeLayer(2),I),
-            both(iBN(8*k),I),
-            *[iResBlock(8*k,8*k,sigma=sigma) for _ in range(block_size)],
-            keepChannels(4*k),
-            both(SqueezeLayer(2),I),
-            both(iBN(16*k),I),
-            *[iResBlock(16*k,16*k,sigma=sigma) for _ in range(block_size)],
-        )
-        self.head = nn.Sequential(
-            BNrelu(16*k),
+        self.classifier_head = nn.Sequential(
+            BNrelu(48),
             Expression(lambda u:u.mean(-1).mean(-1)),
-            nn.Linear(16*k,num_classes)
+            nn.Linear(48,num_classes)
         )
-    def forward(self,x):
-        y,z = self.body(self.foot(x))
-        return self.head(y)
+        self.k = k
+        self.flow = iSequential(self.body,Flatten())
+        self.prior = StandardNormal(3*32*32)
+
+# class iResnetLarge(iResnet):
+#     def __init__(self,num_classes=10,k=32,sigma=1.,block_size=4):
+#         super().__init__()
+#         self.num_classes = num_classes
+#         self.body = iSequential(
+#             padChannels(k-3),
+#             addZslot(),
+#             both(iBN(k),I),
+#             *[iResBlock(k,k,sigma=sigma) for _ in range(block_size)],
+#             both(SqueezeLayer(2),I),
+#             both(iBN(4*k),I),
+#             *[iResBlock(4*k,4*k,sigma=sigma) for _ in range(block_size)],
+#             both(SqueezeLayer(2),I),
+#             both(iBN(16*k),I),
+#             iResBlock(16*k,16*k,sigma=sigma),
+#             keepChannels(8*k),
+#             both(iBN(8*k),I),
+#             *[iResBlock(8*k,8*k,sigma=sigma) for _ in range(block_size)],
+#         )
+#         self.head = nn.Sequential(
+#             BNrelu(8*k),
+#             Expression(lambda u:u.mean(-1).mean(-1)),
+#             nn.Linear(8*k,num_classes)
+#         )
+
+# class iResnetLargeV2(nn.Module,metaclass=Named):
+#     def __init__(self,num_classes=10,k=64,sigma=1.,block_size=4):
+#         super().__init__()
+#         self.num_classes = num_classes
+#         self.foot = iSequential(
+#             padChannels(k-3),
+#             #iConv2d(k,k),
+#             addZslot(),
+#         )
+#         self.body = iSequential(
+#             both(iBN(k),I),
+#             *[iResBlock(k,k,sigma=sigma) for _ in range(block_size)],
+#             keepChannels(k//2),
+#             both(SqueezeLayer(2),I),
+#             both(iBN(2*k),I),
+#             *[iResBlock(2*k,2*k,sigma=sigma) for _ in range(block_size)],
+#             keepChannels(k),
+#             both(SqueezeLayer(2),I),
+#             both(iBN(4*k),I),
+#             *[iResBlock(4*k,4*k,sigma=sigma) for _ in range(block_size)],
+#             keepChannels(2*k),
+#             both(SqueezeLayer(2),I),
+#             both(iBN(8*k),I),
+#             *[iResBlock(8*k,8*k,sigma=sigma) for _ in range(block_size)],
+#             keepChannels(4*k),
+#             both(SqueezeLayer(2),I),
+#             both(iBN(16*k),I),
+#             *[iResBlock(16*k,16*k,sigma=sigma) for _ in range(block_size)],
+#         )
+#         self.head = nn.Sequential(
+#             BNrelu(16*k),
+#             Expression(lambda u:u.mean(-1).mean(-1)),
+#             nn.Linear(16*k,num_classes)
+#         )
+#     def forward(self,x):
+#         y,z = self.body(self.foot(x))
+#         return self.head(y)

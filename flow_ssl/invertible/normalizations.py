@@ -154,6 +154,7 @@ def pad_circular_nd(x: torch.Tensor, pad: int, dim) -> torch.Tensor:
     #print(x.shape)
     return x
 
+@export
 def flip(x, dim):
     indices = [slice(None)] * x.dim()
     indices[dim] = torch.arange(x.size(dim) - 1, -1, -1,
@@ -177,8 +178,9 @@ class SN(nn.Module):
         self.register_buffer('_s',torch.tensor(1.))
 
     def forward(self,x):
-        if not self.training: return self.module(x)/torch.max(self._s,torch.tensor(1.).to(x.device))
         self.input_shape = x.shape[1:]
+        if not self.training: return self.module(x)/torch.max(self._s,torch.tensor(1.).to(x.device))
+        
         bs = x.shape[0]
         if self._u is None:
             random_vec = torch.randn_like(x)[:1]
@@ -188,8 +190,11 @@ class SN(nn.Module):
         zeros_v_and_mby = self.module(zeros_u_and_mbx)
         bias,v_, mby = torch.split(zeros_v_and_mby,[1,1,bs])
         v = v_-bias
+        #print(v.shape)
         W_T = flip(flip(self.module.weight.permute(1,0,2,3),2),3) # Transpose channels, flip filter
-        u = F.conv2d(v,W_T,padding=1)
+        u = F.conv2d(v,W_T,padding=self.module.padding)
+        #print(u.shape)
+        #print(self._u.shape)
         self._s = s = torch.sqrt((self._u*u).sum())
         self._u = (u/u.norm()).detach()
         return mby/torch.max(s,torch.tensor(1.).to(x.device))
