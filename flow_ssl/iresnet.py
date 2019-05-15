@@ -100,11 +100,6 @@ class iBottleneck(iResBlock):
 
 def jvp(x,y,v,retain_graph=True):
     with torch.autograd.enable_grad():
-        if not (x.requires_grad and  y.requires_grad):
-            print(x.requires_grad)
-            print(x.shape)
-            print(y.requires_grad)
-            print(y.shape)
         vJ = torch.autograd.grad(y,x,v,create_graph=retain_graph,allow_unused=True)[0]
     return vJ
 
@@ -207,7 +202,7 @@ class iResnetProper(iResnet):
             *[iBottleneck(12,k//2,sigma=sigma) for i in range(num_per_block)],
             NNdownsample(),
             #iBN(48),
-            *[iBottleneck(48,2*k,sigma=sigma) for i in range(num_per_block)],
+            *[iBottleneck(48,k,sigma=sigma) for i in range(num_per_block)],
         )
         self.classifier_head = nn.Sequential(
             BNrelu(48),
