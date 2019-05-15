@@ -18,6 +18,7 @@ from torch.nn import functional as F
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
 
+import flow_ssl
 from flow_ssl.realnvp import RealNVP 
 from flow_ssl import FlowLoss
 from flow_ssl.distributions import SSLGaussMixture
@@ -77,6 +78,8 @@ parser.add_argument('--dataset', type=str, default="CIFAR10", required=True, met
                 help='Dataset name (default: CIFAR10)')
 parser.add_argument('--data_path', type=str, default=None, required=True, metavar='PATH',
                 help='path to datasets location (default: None)')
+parser.add_argument('--flow', type=str, default="RealNVP", required=False, metavar='PATH',
+                help='Flow model to use (default: RealNVP)')
 parser.add_argument('--logdir', type=str, default=None, required=True, metavar='PATH',
                 help='path to log directory (default: None)')
 parser.add_argument('--ckptdir', type=str, default=None, required=True, metavar='PATH',
@@ -154,8 +157,11 @@ trainloader, testloader, _ = make_sup_data_loaders(
         dataset=args.dataset.lower())
 
 # Model
-print('Building model...')
-net = RealNVP(num_scales=2, in_channels=img_shape[0], mid_channels=64, num_blocks=8)
+print('Building {} model...'.format(args.flow))
+model_cfg = getattr(flow_ssl, args.flow)
+net = model_cfg(in_channels=img_shape[0])
+print("Model contains {} parameters".format(sum([p.numel() for p in net.parameters()])))
+
 net = net.to(device)
 if device == 'cuda':
     net = torch.nn.DataParallel(net, args.gpu_ids)
