@@ -132,6 +132,28 @@ class padChannels(nn.Module):
         return 0
 
 @export
+class RandomPadChannels(nn.Module):
+    def __init__(self,pad_size):
+        super().__init__()
+        self.pad_size = pad_size
+    def forward(self,x):
+        bs = x.shape[0]
+        noise = torch.randn(bs,self.pad_size,*x.shape[2:])
+        self._noise_shape = noise.shape
+        self._device = x.device
+        padded_x = torch.cat([x,noise],dim=1)
+        return padded_x
+    def inverse(self,x):
+        return x[:,x.size(1)-self.pad_size]
+    def logdet(self):
+        # entropy of the noise, coming from the variational
+        # upper bound on the negative log likelihood
+        d = np.prod(self._noise_shape[1:])
+        bs = self._noise_shape[0]
+        gaussian_entropy = d*0.5*torch.log(torch.Tensor([2*np.pi*np.e])).expand(bs)
+        return gaussian_entropy
+
+@export
 class keepChannels(nn.Module):
     def __init__(self,k):
         """k represents the number of channels in x to keep"""

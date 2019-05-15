@@ -18,21 +18,10 @@ class Flow(Trainer):
         super().__init__(*args, **kwargs)
         #self.fixed_input = (self.G.sample_z(32),)
 
-    def loss(self, minibatch, model = None):
+    def loss(self, minibatch):
         """ Standard cross-entropy loss """
         x,y = minibatch
-        if model is None: model = self.model
-        with torch.autograd.enable_grad():
-            #x.requires_grad = True
-            z = model.get_all_z_squashed(x)
-            
-            # 32 x (32x32x32)
-            l2 = .5*(z**2).sum()/len(z) + .5*np.log(2*np.pi)
-            #l2.backward(retain_graph=True)
-            lndet = model.logdet().sum()/len(z)
-            
-        nll = l2-lndet#+l2#l2 + lndets
-        return nll#nll#nn.MSELoss()(z,torch.zeros_like(z))
+        return self.model.nll(x)/(32*32*3)
 
     def logStuff(self, step, minibatch=None):
         """ Handles Logging and any additional needs for subclasses,
@@ -44,11 +33,8 @@ class Flow(Trainer):
         # self.logger.add_scalars('metrics', metrics, step)
         if hasattr(self.model,'sample') and minibatch is not None:
             with Eval(self.model), torch.no_grad():
-                self.model(minibatch[0])
+                self.model.nll(minibatch[0])
                 fake_images = self.model.sample(32).cpu().data
-                # for i,p in enumerate(self.model.parameters()):
-                #     if (i>=5) and (i<8): 
-                #         print(f"Some weight: {p.reshape(-1)[-1]}")
             img_grid = vutils.make_grid(fake_images, normalize=False,range=(0,1))
             self.logger.add_image('samples', img_grid, step)
         super().logStuff(step,minibatch)
@@ -66,13 +52,14 @@ from oil.tuning.study import train_trial
 from oil.datasetup.dataloaders import getLabLoader
 from oil.datasetup.datasets import CIFAR10
 from oil.architectures.img_classifiers import layer13s
-from invertible.iresnet import iResnet,iResnetLarge
+#from invertible.iresnet import iResnet,iResnetLarge
+from flow_ssl.icnn.icnn import iCNN
 import collections
 
 def simpleFlowTrial(strict=False):
     def makeTrainer(config):
         cfg = {
-            'dataset': CIFAR10,'network':iResnet,
+            'dataset': CIFAR10,'network':iCNN,'net_config':{},
             'loader_config': {'amnt_dev':5000,'lab_BS':64, 'pin_memory':True,'num_workers':2},
             'opt_config':{'lr':.0003,},# 'momentum':.9, 'weight_decay':1e-4,'nesterov':True},
             'num_epochs':100,'trainer_config':{},

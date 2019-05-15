@@ -1,7 +1,9 @@
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
+from ..utils import export
 
+@export
 class iSLReLU(nn.Module):
     def __init__(self,slope=.1):
         self.alpha = (1 - slope)/(1+slope)
