@@ -26,6 +26,7 @@ class Flow(Trainer):
     def logStuff(self, step, minibatch=None):
         """ Handles Logging and any additional needs for subclasses,
             should have no impact on the training """
+
         # metrics = {}
         # try: metrics['FID'],metrics['IS'] = FID_and_IS(self.as_dataloader(),self.dataloaders['dev'])
         # except KeyError: pass
