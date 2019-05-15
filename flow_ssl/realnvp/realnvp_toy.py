@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torch import distributions
 
-from flow_ssl.invertible.auto_inverse import iSequential
+from flow_ssl.invertible import iSequential
 
 class ToyCouplingLayer(nn.Module):
 

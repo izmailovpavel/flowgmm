@@ -16,29 +16,10 @@ from flow_ssl.invertible.parts import passThrough
 from flow_ssl.invertible.coupling_layers import iConv1x1
 
 
-class Glow(nn.Module):
-
-    def __init__(self, num_scales=2, in_channels=3, mid_channels=64, num_blocks=8):
-        super(RealNVP, self).__init__()
-        
-        layers = [addZslot(), passThrough(iLogits())]
-
-        for scale in range(num_scales):
-                
-            num_in = 4 if scale == num_scales-1 else 3
-            layers += [passThrough(*self._glow_step(in_channels, mid_channels, num_blocks) 
-                       for _ in range(3)]
-            layers.append(passThrough(SqueezeLayer(2)))
-            layers += [passThrough(*self._glow_step(4 * in_channels, 2 * mid_channels, num_blocks) 
-                       for _ in range(3)]
-            layers.append(keepChannels(2 * in_channels))
-            
-            in_channels *= 2
-            mid_channels *= 2
-
-        layers.append(FlatJoin())
-        self.body = iSequential(*layers)
-        #print(layers)
+class GlowBase(nn.Module):
+    
+    def __init__(self):
+        super(GlowBase, self).__init__()
 
     def forward(self,x):
         return self.body(x)
@@ -50,10 +31,56 @@ class Glow(nn.Module):
         return self.body.inverse(z)
 
     @staticmethod
-    def _glowstep(in_channels, mid_channels, num_blocks):
+    def _glow_step(in_channels, mid_channels, num_blocks):
         layers = [
                 #TODO: actnorm
                 iConv1x1(in_channels),
                 CouplingLayer(in_channels, mid_channels, num_blocks, MaskChannelwise(reverse_mask=False)),
         ]
         return layers
+
+class Glow(GlowBase):
+
+    def __init__(self, num_scales=2, in_channels=3, mid_channels=64, num_blocks=8):
+        super(Glow, self).__init__()
+        
+        layers = [addZslot(), passThrough(iLogits())]
+
+        for scale in range(num_scales):
+            num_in = 4 if scale == num_scales-1 else 3
+            for _ in range(num_in):
+                layers.append(passThrough(*self._glow_step(in_channels, mid_channels, num_blocks)))
+            layers.append(passThrough(SqueezeLayer(2)))
+            num_out = 0 if scale == num_scales-1 else 3
+            for _ in range(num_in):
+                layers.append(passThrough(*self._glow_step(4*in_channels, 2*mid_channels, num_blocks)))
+            layers.append(keepChannels(2 * in_channels))
+            
+            in_channels *= 2
+            mid_channels *= 2
+
+        layers.append(FlatJoin())
+        self.body = iSequential(*layers)
+
+
+class GlowMNIST(GlowBase):
+    def __init__(self, in_channels=1, mid_channels=64, num_blocks=8):
+        super(GlowMNIST, self).__init__()
+        
+        self.body = iSequential(
+                addZslot(), 
+                passThrough(iLogits()),
+                passThrough(SqueezeLayer(2)),
+                passThrough(*self._glow_step(4*in_channels, 2*mid_channels, num_blocks)),
+                passThrough(*self._glow_step(4*in_channels, 2*mid_channels, num_blocks)),
+                passThrough(*self._glow_step(4*in_channels, 2*mid_channels, num_blocks)),
+                passThrough(*self._glow_step(4*in_channels, 2*mid_channels, num_blocks)),
+                passThrough(*self._glow_step(4*in_channels, 2*mid_channels, num_blocks)),
+                passThrough(*self._glow_step(4*in_channels, 2*mid_channels, num_blocks)),
+                keepChannels(2 * in_channels),
+                passThrough(*self._glow_step(2*in_channels, 2*mid_channels, num_blocks)),
+                passThrough(*self._glow_step(2*in_channels, 2*mid_channels, num_blocks)),
+                passThrough(*self._glow_step(2*in_channels, 2*mid_channels, num_blocks)),
+                passThrough(*self._glow_step(2*in_channels, 2*mid_channels, num_blocks)),
+                FlatJoin()
+            )
