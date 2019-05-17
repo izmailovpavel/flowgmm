@@ -13,6 +13,7 @@ from flow_ssl.invertible.downsample import SqueezeLayer
 from flow_ssl.invertible.parts import addZslot
 from flow_ssl.invertible.parts import FlatJoin
 from flow_ssl.invertible.parts import passThrough
+from flow_ssl.invertible.parts import ActNorm
 from flow_ssl.invertible.coupling_layers import iConv1x1
 
 
@@ -33,7 +34,7 @@ class GlowBase(nn.Module):
     @staticmethod
     def _glow_step(in_channels, mid_channels, num_blocks):
         layers = [
-                #TODO: actnorm
+                ActNorm(in_channels),
                 iConv1x1(in_channels),
                 CouplingLayer(in_channels, mid_channels, num_blocks, MaskChannelwise(reverse_mask=False)),
         ]

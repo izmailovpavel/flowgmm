@@ -115,33 +115,37 @@ def passThrough(*layers):
 
 @export
 def ActNorm(num_channels):
-    return iSequential(ActNormCenter(num_channels), ActNormScale(num_channels))
+    return iSequential(ActNormShift(num_channels), ActNormScale(num_channels))
 
 
 class ActNormShift(nn.Module):
     def __init__(self, num_channels):
         super().__init__()
-        self.register_parameter("shift", torch.zeros([1, num_channels, 1, 1]))
+        self.register_parameter("shift", 
+                torch.nn.Parameter(torch.zeros([1, num_channels, 1, 1])))
         self.initialized = False
 
     def forward(self, x):
         if not self.initialized:
             self.shift.data = -x.mean(dim=(0, 2, 3)).view_as(self.shift)
             self.initialized = True
-        self.logdet = torch.zeros(x.shape)
+        self._logdet = 0.
+        #print("ActNorm shift:", (x + self.shift).mean(dim=(0, 2, 3)))
         return x + self.shift 
 
     def inverse(self, x):
         return x - self.shift 
 
     def logdet(self):
-        return self.logdet
+        return self._logdet
 
 
 class ActNormScale(nn.Module):
     def __init__(self, num_channels):
         super().__init__()
-        self.register_parameter("log_scale", torch.zeros([1, num_channels, 1, 1]))
+        self.register_parameter("log_scale", 
+                torch.nn.Parameter(torch.zeros([1, num_channels, 1, 1])))
+        self.initialized = False
 
     @property
     def scale(self):
@@ -149,13 +153,15 @@ class ActNormScale(nn.Module):
 
     def forward(self, x):
         if not self.initialized:
-            self.shift.data = -x.mean(dim=(0, 2, 3)).view_as(self.shift)
+            x_var = (x**2).mean(dim=(0, 2, 3)).view_as(self.scale)
+            self.log_scale.data = -torch.log(x_var + 1e-6) / 2
             self.initialized = True
-        self.logdet = x.shape[2] * x.shape[3] * self.log_scale.sum(dim=1)
+        self._logdet = x.shape[2] * x.shape[3] * self.log_scale.sum().item()
+        #print("ActNorm scale:", ((x * self.scale)**2).mean(dim=(0, 2, 3)))
         return x * self.scale
 
     def inverse(self, x):
         return x / self.scale 
 
     def logdet(self):
-        return self.logdet
+        return self._logdet

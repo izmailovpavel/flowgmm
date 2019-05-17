@@ -34,11 +34,13 @@ def make_sup_data_loaders(
     else:
         ds = getattr(torchvision.datasets, dataset.upper())
 
-    if not (hasattr(ds, "train_data") or hasattr(ds, "test_data")):
+    train_set = ds(root=path, train=True, download=True, transform=transform_train)
+
+    if not ((hasattr(train_set, "train_data") or hasattr(train_set, "test_data"))):
         ds_base = ds
         ds = lambda *args, **kwargs: OldInterface(ds_base(*args, **kwargs))
+        train_set = ds(root=path, train=True, download=True, transform=transform_train)
 
-    train_set = ds(root=path, train=True, download=True, transform=transform_train)
     num_classes = max(train_set.train_labels) + 1
 
     if use_validation:
