@@ -9,17 +9,17 @@ from oil.tuning.study import Study, train_trial
 # from oil.tuning.configGenerator import uniform,logUniform
 # from invertible.flow import simpleFlowTrial
 # from invertible.iEluNetwork import iEluNet,iEluNetMultiScale,iEluNetMultiScaleLarger,iEluNet3d,iLinear
-from flow import simpleFlowTrial
+from flow_ssl.flow_trainer import simpleFlowTrial
 from flow_ssl.icnn.icnn import iLinear3d,iCNN,MultiScaleiCNNv2,MultiScaleiCNN,iCNN3d
 from flow_ssl.iresnet import iResnet,iResnetProper
-log_dir_base = os.path.expanduser('~/tb-experiments/iresnet_nobn')
+log_dir_base = os.path.expanduser('~/tb-experiments/iresnet_nobn_t2')
 cfg_spec = {
     'dataset': [CIFAR10],
     'network': [iResnetProper],
     'net_config': {},
-    'loader_config': {'amnt_dev':5000,'lab_BS':50},
+    'loader_config': {'amnt_dev':5000,'lab_BS':32},
     'opt_config':{'lr':[.0003]},
-    'num_epochs':30, 
+    'num_epochs':10*(3,), 
     'trainer_config':{'log_dir':lambda cfg:log_dir_base+\
         '/{}/{}/{}'.format(cfg['dataset'],cfg['network'],cfg['opt_config']['lr'])}
     }
