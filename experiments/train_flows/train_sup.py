@@ -160,7 +160,7 @@ trainloader, testloader, _ = make_sup_data_loaders(
 print('Building {} model...'.format(args.flow))
 model_cfg = getattr(flow_ssl, args.flow)
 net = model_cfg(in_channels=img_shape[0])
-if args.flow == "iCNN3d":
+if args.flow in ["iCNN3d", "iResnetProper"]:
     net = net.flow
 print("Model contains {} parameters".format(sum([p.numel() for p in net.parameters()])))
 
@@ -237,7 +237,9 @@ for epoch in range(start_epoch, args.num_epochs):
     # Save samples and data
     if epoch % args.eval_freq == 0:
         utils.test_classifier(epoch, net, testloader, device, loss_fn, writer)
-        writer.add_image("means", means.reshape((10, *img_shape)))
+        mean_imgs = torchvision.utils.make_grid(
+                means.reshape((10, *img_shape)), nrow=5)
+        writer.add_image("means", mean_imgs)
         images = []
         for i in range(10):
             images_cls = utils.sample(net, loss_fn.prior, args.num_samples // 10,
