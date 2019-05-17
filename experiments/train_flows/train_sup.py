@@ -63,8 +63,8 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm, wr
                                      bpd=utils.bits_per_dim(x, loss_unsup_meter.avg),
                                      acc=acc_meter.avg)
             progress_bar.update(x.size(0))
-
-    writer.add_image("data/x", x[:10])
+    x_img = torchvision.utils.make_grid(x[:10], nrow=2 , padding=2, pad_value=255)
+    writer.add_image("data/x", x_img)
     writer.add_scalar("train/loss", loss_meter.avg, epoch)
     writer.add_scalar("train/loss_unsup", loss_unsup_meter.avg, epoch)
     writer.add_scalar("train/loss_nll", loss_nll_meter.avg, epoch)
@@ -160,6 +160,8 @@ trainloader, testloader, _ = make_sup_data_loaders(
 print('Building {} model...'.format(args.flow))
 model_cfg = getattr(flow_ssl, args.flow)
 net = model_cfg(in_channels=img_shape[0])
+if args.flow == "iCNN3d":
+    net = net.flow
 print("Model contains {} parameters".format(sum([p.numel() for p in net.parameters()])))
 
 net = net.to(device)
@@ -193,8 +195,9 @@ print("Pairwise dists:", cdist(means_np, means_np))
 if args.means_trainable:
     print("Using learnable means")
     means = torch.tensor(means_np, requires_grad=True)
-
-writer.add_image("means", means.reshape((10, *img_shape)))
+mean_imgs = torchvision.utils.make_grid(
+        means.reshape((10, *img_shape)), nrow=5)
+writer.add_image("means", mean_imgs)
 prior = SSLGaussMixture(means, device=device)
 loss_fn = FlowLoss(prior)
 
@@ -239,8 +242,10 @@ for epoch in range(start_epoch, args.num_epochs):
         for i in range(10):
             images_cls = utils.sample(net, loss_fn.prior, args.num_samples // 10,
                                       cls=i, device=device, sample_shape=img_shape)
+            images_cls_concat = torchvision.utils.make_grid(
+                    images_cls, nrow=2, padding=2, pad_value=255)
             images.append(images_cls)
-            writer.add_image("samples/class_"+str(i), images_cls)
+            writer.add_image("samples/class_"+str(i), images_cls_concat)
         images = torch.cat(images)
         os.makedirs(os.path.join(args.ckptdir, 'samples'), exist_ok=True)
         images_concat = torchvision.utils.make_grid(images, nrow=args.num_samples //  10 , padding=2, pad_value=255)

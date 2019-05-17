@@ -3,6 +3,7 @@ from flow_ssl.realnvp import RealNVP
 from flow_ssl.realnvp import ToyRealNVP
 #from flow_ssl.iresnet import iResnet
 from flow_ssl.icnn.icnn import iCNN
+from flow_ssl.icnn.icnn import iCNN3d
 from flow_ssl.glow import Glow
 from flow_ssl.glow import GlowMNIST
 #from flow_ssl.flow_trainer import Flow

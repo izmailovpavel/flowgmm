@@ -1,5 +1,6 @@
 import torchvision
 from torchvision.datasets import SVHN
+from torchvision.datasets import CIFAR10
 
 class SVHN_(SVHN):
     """
@@ -34,3 +35,33 @@ class SVHN_(SVHN):
                 return self.test_labels
         else:
             raise AttributeError(attr)
+
+
+# For torch 1.0.1
+
+class OldInterface:
+    def __init__(self, vision_dataset):
+        self.vision_dataset = vision_dataset
+
+    @property
+    def train_labels(self):
+        return self.vision_dataset.targets
+
+    @property
+    def test_labels(self):
+        return self.vision_dataset.targets
+
+    @property
+    def train_data(self):
+        return self.vision_dataset.data
+
+    @property
+    def test_data(self):
+        return self.vision_dataset.data
+
+    def __len__(self):
+        return len(self.vision_dataset)
+
+    def __getitem__(self, i):
+        return self.vision_dataset[i]
+
