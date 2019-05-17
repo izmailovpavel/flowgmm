@@ -14,7 +14,7 @@ import scipy.sparse
 
 
 def iConvSelu(channels):
-    return iSequential(iConv2d(channels,channels),iLeakyReLU())
+    return iSequential(iConv2d(channels,channels),iSLReLU())
 
 def iConvBNselu(channels):
     return iSequential(iConv2d(channels,channels),iBN(channels),iLeakyReLU())#iSLReLU())
@@ -109,6 +109,7 @@ class MultiScaleiCNN(iCNN):
         )
         self.flow = iSequential(self.body,Flatten())
         self.prior = StandardNormal(k*32*32)
+
 @export
 class MultiScaleiCNNv2(MultiScaleiCNN):
     def __init__(self, num_classes=10,k=128):
@@ -148,29 +149,30 @@ class MultiScaleiCNNv2(MultiScaleiCNN):
         )
         self.flow = iSequential(self.body,Flatten())
         self.prior = StandardNormal(k*32*32)
+
 @export
 class iCNN3d(FlowNetwork):
-    def __init__(self, num_classes=10):
+    def __init__(self, in_channels=3, num_classes=10):
         super().__init__()
         self.num_classes = num_classes
         self.body = iSequential(
             iLogits(),
-            *iConvSelu(3),
-            *iConvSelu(3),
-            *iConvSelu(3),
+            *iConvSelu(in_channels),
+            *iConvSelu(in_channels),
+            *iConvSelu(in_channels),
             iAvgPool2d(),
-            *iConvSelu(12),
-            *iConvSelu(12),
-            *iConvSelu(12),
+            *iConvSelu(4*in_channels),
+            *iConvSelu(4*in_channels),
+            *iConvSelu(4*in_channels),
             iAvgPool2d(),
-            *iConvSelu(48),
-            *iConvSelu(48),
-            *iConvSelu(48),
+            *iConvSelu(16*in_channels),
+            *iConvSelu(16*in_channels),
+            *iConvSelu(16*in_channels),
             iAvgPool2d(),
-            *iConvSelu(192),
-            *iConvSelu(192),
-            *iConvSelu(192),
-            iConv2d(192,192),
+            *iConvSelu(64*in_channels),
+            *iConvSelu(64*in_channels),
+            *iConvSelu(64*in_channels),
+            iConv2d(64*in_channels,64*in_channels),
         )
         self.classifier_head = nn.Sequential(
             Expression(lambda u:u.mean(-1).mean(-1)),

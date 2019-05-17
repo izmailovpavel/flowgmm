@@ -66,8 +66,6 @@ class iConv1x1(nn.Conv2d):
         self._input_shape = x.shape
         return F.conv2d(x,self.weight,self.bias)
 
-
-
 @export
 class iCoordInjection(nn.Module):
     def __init__(self,out_channels,mid_channels=8):
@@ -93,17 +91,6 @@ class iCoordInjection(nn.Module):
         return (y - bias)/mul
     def logdet(self):
         return self._log_mul.sum(3).sum(2).sum(1)
-
-
-
-
-
-
-
-
-
-
-
 
 def fft_conv3x3(x,weight):
     bs,c,h,w = x.shape
