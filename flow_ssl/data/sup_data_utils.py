@@ -2,6 +2,7 @@ import torch
 import torchvision
 import os
 from flow_ssl.data.image_datasets import SVHN_
+from flow_ssl.data.image_datasets import OldInterface
 
 
 def make_sup_data_loaders(
@@ -32,6 +33,10 @@ def make_sup_data_loaders(
         ds = SVHN_
     else:
         ds = getattr(torchvision.datasets, dataset.upper())
+
+    if not (hasattr(ds, "train_data") or hasattr(ds, "test_data")):
+        ds_base = ds
+        ds = lambda *args, **kwargs: OldInterface(ds_base(*args, **kwargs))
 
     train_set = ds(root=path, train=True, download=True, transform=transform_train)
     num_classes = max(train_set.train_labels) + 1
