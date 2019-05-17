@@ -8,6 +8,7 @@ from .normalizations import pad_circular_nd
 from flow_ssl.utils import export
 from flow_ssl.conv_parts import conv2d
 
+
 @export
 class iConv2d(nn.Module):
     """ wraps conv2d in a module with an inverse function """
@@ -65,24 +66,6 @@ class iConv1x1(nn.Conv2d):
     def forward(self, x):
         self._input_shape = x.shape
         return F.conv2d(x,self.weight,self.bias)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def fft_conv3x3(x,weight):

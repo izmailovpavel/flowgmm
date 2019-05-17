@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from ..utils import export
+from torch.nn import functional as F
 
 @export
 class iSequential(torch.nn.Sequential):
@@ -110,3 +111,51 @@ class both(nn.Module):
 @export
 def passThrough(*layers):
     return iSequential(*[both(layer,I) for layer in layers])
+
+
+@export
+def ActNorm(num_channels):
+    return iSequential(ActNormCenter(num_channels), ActNormScale(num_channels))
+
+
+class ActNormShift(nn.Module):
+    def __init__(self, num_channels):
+        super().__init__()
+        self.register_parameter("shift", torch.zeros([1, num_channels, 1, 1]))
+        self.initialized = False
+
+    def forward(self, x):
+        if not self.initialized:
+            self.shift.data = -x.mean(dim=(0, 2, 3)).view_as(self.shift)
+            self.initialized = True
+        self.logdet = torch.zeros(x.shape)
+        return x + self.shift 
+
+    def inverse(self, x):
+        return x - self.shift 
+
+    def logdet(self):
+        return self.logdet
+
+
+class ActNormScale(nn.Module):
+    def __init__(self, num_channels):
+        super().__init__()
+        self.register_parameter("log_scale", torch.zeros([1, num_channels, 1, 1]))
+
+    @property
+    def scale(self):
+        return torch.exp(self.log_scale)
+
+    def forward(self, x):
+        if not self.initialized:
+            self.shift.data = -x.mean(dim=(0, 2, 3)).view_as(self.shift)
+            self.initialized = True
+        self.logdet = x.shape[2] * x.shape[3] * self.log_scale.sum(dim=1)
+        return x * self.scale
+
+    def inverse(self, x):
+        return x / self.scale 
+
+    def logdet(self):
+        return self.logdet
