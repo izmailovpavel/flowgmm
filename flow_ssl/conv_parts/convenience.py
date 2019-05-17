@@ -3,9 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from flow_ssl.utils import export,Expression
 #from ..invertible import iConv2d
-
-def CoordConv(*args,**kwargs):
-    raise NotImplementedError
+try: 
+    from oil.architectures.parts.CoordConv import CoordConv
+except:
+    def CoordConv(*args,**kwargs):
+        raise NotImplementedError
 
 @export
 def conv2d(in_channels,out_channels,kernel_size=3,coords=False,dilation=1,**kwargs):

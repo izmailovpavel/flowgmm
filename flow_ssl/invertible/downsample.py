@@ -138,19 +138,19 @@ class RandomPadChannels(nn.Module):
         self.pad_size = pad_size
     def forward(self,x):
         bs = x.shape[0]
-        noise = torch.randn(bs,self.pad_size,*x.shape[2:])
+        noise = torch.randn(bs,self.pad_size,*x.shape[2:]).to(x.device)
         self._noise_shape = noise.shape
         self._device = x.device
         padded_x = torch.cat([x,noise],dim=1)
         return padded_x
     def inverse(self,x):
-        return x[:,x.size(1)-self.pad_size]
+        return x[:,:x.size(1)-self.pad_size]
     def logdet(self):
         # entropy of the noise, coming from the variational
         # upper bound on the negative log likelihood
         d = np.prod(self._noise_shape[1:])
         bs = self._noise_shape[0]
-        gaussian_entropy = d*0.5*torch.log(torch.Tensor([2*np.pi*np.e])).expand(bs)
+        gaussian_entropy = d*0.5*torch.log(torch.Tensor([2*np.pi*np.e])).expand(bs).to(self._device)
         return gaussian_entropy
 
 @export
