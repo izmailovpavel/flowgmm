@@ -37,6 +37,7 @@ class FlowNetwork(nn.Module,metaclass=Named):
         z = self.flow(x)
         logdet = self.flow.logdet()
         return  -1*(self.prior.log_prob(z) + logdet).mean()
+
 @export
 class iCNN(FlowNetwork):
     """
@@ -109,6 +110,7 @@ class MultiScaleiCNN(iCNN):
         )
         self.flow = iSequential(self.body,Flatten())
         self.prior = StandardNormal(k*32*32)
+
 @export
 class MultiScaleiCNNv2(MultiScaleiCNN):
     def __init__(self, num_classes=10,k=128):
@@ -148,25 +150,26 @@ class MultiScaleiCNNv2(MultiScaleiCNN):
         )
         self.flow = iSequential(self.body,Flatten())
         self.prior = StandardNormal(k*32*32)
+
 @export
 class iCNN3d(FlowNetwork):
-    def __init__(self, num_classes=10):
+    def __init__(self, in_channels=3, num_classes=10):
         super().__init__()
         self.num_classes = num_classes
         self.body = iSequential(
             iLogits(),
-            *iConvBNselu(3),
-            *iConvBNselu(3),
+            *iConvBNselu(in_channels),
+            *iConvBNselu(in_channels),
             NNdownsample(),
-            *iConvBNselu(12),
-            *iConvBNselu(12),
+            *iConvBNselu(4*in_channels),
+            *iConvBNselu(4*in_channels),
             NNdownsample(),
-            *iConvBNselu(48),
-            *iConvBNselu(48),
+            *iConvBNselu(16*in_channels),
+            *iConvBNselu(16*in_channels),
             NNdownsample(),
-            *iConvBNselu(192),
-            *iConvBNselu(192),
-            iConv2d(192,192),
+            *iConvBNselu(64*in_channels),
+            *iConvBNselu(64*in_channels),
+            iConv2d(64*in_channels,64*in_channels),
         )
         self.classifier_head = nn.Sequential(
             Expression(lambda u:u.mean(-1).mean(-1)),
