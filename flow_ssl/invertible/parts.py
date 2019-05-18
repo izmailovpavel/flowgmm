@@ -24,6 +24,9 @@ class iSequential(torch.nn.Sequential):
             log_det += module.logdet()
         return log_det
 
+# @export
+# class iSequential2(torch.nn.Sequential): pass
+
 @export
 class addZslot(nn.Module):
     def __init__(self):
@@ -115,7 +118,7 @@ def passThrough(*layers):
 
 @export
 def ActNorm(num_channels):
-    return iSequential(ActNormCenter(num_channels), ActNormScale(num_channels))
+    return iSequential(ActNormShift(num_channels), ActNormScale(num_channels))
 
 
 class ActNormShift(nn.Module):

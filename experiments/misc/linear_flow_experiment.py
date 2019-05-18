@@ -10,15 +10,15 @@ from oil.tuning.study import Study, train_trial
 # from invertible.flow import simpleFlowTrial
 # from invertible.iEluNetwork import iEluNet,iEluNetMultiScale,iEluNetMultiScaleLarger,iEluNet3d,iLinear
 from flow_ssl.flow_trainer import simpleFlowTrial
-from flow_ssl.icnn.icnn import iLinear3d
-log_dir_base = os.path.expanduser('~/tb-experiments/linear_coords_avgpool_fast')
+from flow_ssl.icnn.icnn import iLinear3d,iCNN3dCoords
+log_dir_base = os.path.expanduser('~/tb-experiments/nonlinear_sigmoidcoords')
 cfg_spec = {
     'dataset': [CelebA],
-    'network': [iLinear3d],
-    'net_config': {},
+    'network': [iCNN3dCoords],
+    'net_config': {'res':64},
     'loader_config': {'amnt_dev':5000,'lab_BS':50},
     'opt_config':{'lr':[.0003]},
-    'num_epochs':5, 
+    'num_epochs':10, 
     'trainer_config':{'log_dir':lambda cfg:log_dir_base+\
         '/{}/{}/{}'.format(cfg['dataset'],cfg['network'],cfg['opt_config']['lr'])}
     }
