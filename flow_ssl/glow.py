@@ -13,6 +13,7 @@ from flow_ssl.invertible.downsample import SqueezeLayer
 from flow_ssl.invertible.parts import addZslot
 from flow_ssl.invertible.parts import FlatJoin
 from flow_ssl.invertible.parts import passThrough
+from flow_ssl.invertible.parts import ActNorm
 from flow_ssl.invertible.coupling_layers import iConv1x1
 
 
@@ -33,11 +34,12 @@ class GlowBase(nn.Module):
     @staticmethod
     def _glow_step(in_channels, mid_channels, num_blocks):
         layers = [
-                #TODO: actnorm
+                ActNorm(in_channels),
                 iConv1x1(in_channels),
                 CouplingLayer(in_channels, mid_channels, num_blocks, MaskChannelwise(reverse_mask=False)),
         ]
         return layers
+
 
 class Glow(GlowBase):
 
@@ -64,23 +66,38 @@ class Glow(GlowBase):
 
 
 class GlowMNIST(GlowBase):
-    def __init__(self, in_channels=1, mid_channels=64, num_blocks=8):
+    def __init__(self, in_channels=1, mid_channels=64, num_blocks=4):
         super(GlowMNIST, self).__init__()
         
         self.body = iSequential(
                 addZslot(), 
                 passThrough(iLogits()),
+                passThrough(*self._glow_step(in_channels, mid_channels, num_blocks, MaskCheckerboard)),
+                passThrough(*self._glow_step(in_channels, mid_channels, num_blocks, MaskCheckerboard)),
+                passThrough(*self._glow_step(in_channels, mid_channels, num_blocks, MaskCheckerboard)),
                 passThrough(SqueezeLayer(2)),
-                passThrough(*self._glow_step(4*in_channels, 2*mid_channels, num_blocks)),
-                passThrough(*self._glow_step(4*in_channels, 2*mid_channels, num_blocks)),
-                passThrough(*self._glow_step(4*in_channels, 2*mid_channels, num_blocks)),
-                passThrough(*self._glow_step(4*in_channels, 2*mid_channels, num_blocks)),
-                passThrough(*self._glow_step(4*in_channels, 2*mid_channels, num_blocks)),
-                passThrough(*self._glow_step(4*in_channels, 2*mid_channels, num_blocks)),
-                keepChannels(2 * in_channels),
-                passThrough(*self._glow_step(2*in_channels, 2*mid_channels, num_blocks)),
-                passThrough(*self._glow_step(2*in_channels, 2*mid_channels, num_blocks)),
-                passThrough(*self._glow_step(2*in_channels, 2*mid_channels, num_blocks)),
-                passThrough(*self._glow_step(2*in_channels, 2*mid_channels, num_blocks)),
+                passThrough(*self._glow_step(4*in_channels, mid_channels, num_blocks, MaskChannelwise)),
+                passThrough(*self._glow_step(4*in_channels, mid_channels, num_blocks, MaskChannelwise)),
+                keepChannels(2*in_channels),
+                passThrough(*self._glow_step(2*in_channels, mid_channels, num_blocks, MaskCheckerboard)),
+                passThrough(*self._glow_step(2*in_channels, mid_channels, num_blocks, MaskCheckerboard)),
+                passThrough(*self._glow_step(2*in_channels, mid_channels, num_blocks, MaskCheckerboard)),
+                passThrough(SqueezeLayer(2)),
+                passThrough(*self._glow_step(8*in_channels, mid_channels, num_blocks, MaskChannelwise)),
+                passThrough(*self._glow_step(8*in_channels, mid_channels, num_blocks, MaskChannelwise)),
+                keepChannels(4*in_channels),
+                passThrough(*self._glow_step(4*in_channels, mid_channels, num_blocks, MaskCheckerboard)),
+                passThrough(*self._glow_step(4*in_channels, mid_channels, num_blocks, MaskCheckerboard)),
+                passThrough(*self._glow_step(4*in_channels, mid_channels, num_blocks, MaskCheckerboard)),
+                passThrough(*self._glow_step(4*in_channels, mid_channels, num_blocks, MaskChannelwise)),
                 FlatJoin()
             )
+
+    @staticmethod
+    def _glow_step(in_channels, mid_channels, num_blocks, mask_class):
+        layers = [
+                ActNorm(in_channels),
+                iConv1x1(in_channels),
+                CouplingLayer(in_channels, mid_channels, num_blocks, mask_class(reverse_mask=False)),
+        ]
+        return layers

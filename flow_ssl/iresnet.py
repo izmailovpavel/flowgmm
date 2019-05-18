@@ -187,7 +187,7 @@ class iResnet(FlowNetwork):
 
 @export
 class iResnetProper(iResnet):
-    def __init__(self,num_classes=10,k=256,sigma=.6):
+    def __init__(self, in_channels=3, num_classes=10, k=256, sigma=.6):
         super().__init__()
         num_per_block = 5
         self.num_classes = num_classes
@@ -196,18 +196,18 @@ class iResnetProper(iResnet):
             #iConv2d(3,3),
 
             #iBN(3),
-            *[iBottleneck(3,k//4,sigma=sigma) for i in range(num_per_block)],
+            *[iBottleneck(in_channels,k//4,sigma=sigma) for i in range(num_per_block)],
             NNdownsample(),
             #iBN(12),
-            *[iBottleneck(12,k//2,sigma=sigma) for i in range(num_per_block)],
+            *[iBottleneck(in_channels*4,k//2,sigma=sigma) for i in range(num_per_block)],
             NNdownsample(),
             #iBN(48),
-            *[iBottleneck(48,k,sigma=sigma) for i in range(num_per_block)],
+            *[iBottleneck(in_channels*16,k,sigma=sigma) for i in range(num_per_block)],
         )
         self.classifier_head = nn.Sequential(
-            BNrelu(48),
+            BNrelu(in_channels*16),
             Expression(lambda u:u.mean(-1).mean(-1)),
-            nn.Linear(48,num_classes)
+            nn.Linear(in_channels*16,num_classes)
         )
         self.k = k
         self.flow = iSequential(self.body,Flatten())
