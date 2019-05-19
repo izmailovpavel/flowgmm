@@ -7,7 +7,7 @@ import scipy.sparse
 from .normalizations import pad_circular_nd,flip
 from flow_ssl.utils import export
 from flow_ssl.conv_parts import conv2d
-
+import itertools
 
 @export
 class iConv2d(nn.Module):
@@ -19,9 +19,7 @@ class iConv2d(nn.Module):
         self._reverse_iters = 0
         self._inverses_evaluated = 0
         self._circ= circ
-    @property
-    def iters_per_reverse(self):
-        return self._reverse_iters/self._inverses_evaluated
+
     def forward(self,x):
         self._shape = x.shape
         if self._circ:
@@ -46,6 +44,18 @@ class iConv2d(nn.Module):
         logdet = (eigs.log().sum() / 2.0).expand(bs)
         # 1/4 \sum_{h,w} log det (DDt)
         return logdet
+@export
+class ClippediConv2d(iConv2d):
+    def __init__(self,*args,clip=(.01,None),**kwargs):
+        super().__init__(*args,**kwargs)
+        self.clip_sigmas = clip
+        self.fwd_count = 0
+    def forward(self,x):
+        if self.training:
+            self.fwd_count+=1
+            if self.fwd_count%1000==0:
+                self.conv.weight.data = Clip_OperatorNorm(self.conv.weight.data,x.shape[2:],self.clip_sigmas)
+        return super().forward(x)
 
 @export
 class iConv1x1(nn.Conv2d):
@@ -68,7 +78,7 @@ class iConv1x1(nn.Conv2d):
 
 @export
 class iCoordInjection(nn.Module):
-    def __init__(self,out_channels,mid_channels=8):
+    def __init__(self,out_channels,mid_channels=16):
         super().__init__()
         self.mul_net = nn.Sequential(conv2d(0,mid_channels,coords=True),
                                 nn.ReLU(),conv2d(mid_channels,out_channels,coords=True))
@@ -78,19 +88,42 @@ class iCoordInjection(nn.Module):
     def forward(self,x):
         bs,c,h,w = x.shape
         empty_input = torch.zeros(bs,0,h,w).to(x.device)
-        log_mul = self.mul_net(empty_input)
-        mul = torch.exp(log_mul)
+        mul_logit = self.mul_net(empty_input)
+        mul = torch.sigmoid(mul_logit)
         bias = self.bias_net(empty_input)
-        self._log_mul = log_mul
+        self._log_mul = mul.log()
         return x*mul + bias
     def inverse(self,y):
         bs,c,h,w = y.shape
         empty_input = torch.zeros(bs,0,h,w).to(y.device)
-        mul = torch.exp(self.mul_net(empty_input))
+        mul = torch.sigmoid(self.mul_net(empty_input))
         bias = self.bias_net(empty_input)
         return (y - bias)/mul
     def logdet(self):
         return self._log_mul.sum(3).sum(2).sum(1)
+
+@export
+class iSimpleCoords(nn.Module):
+    def __init__(self,out_channels):
+        super().__init__()
+        self.mul_net = conv2d(0,out_channels,coords=True)
+        self.bias_net = self.mul_net = conv2d(0,out_channels,coords=True)
+    def forward(self,x):
+        bs,c,h,w = x.shape
+        empty_input = torch.zeros(bs,0,h,w).to(x.device)
+        mul = self.mul_net(empty_input)
+        bias = self.bias_net(empty_input)
+        self._log_mul = mul.log()
+        return x*mul + bias
+    def inverse(self,y):
+        bs,c,h,w = y.shape
+        empty_input = torch.zeros(bs,0,h,w).to(y.device)
+        mul = self.mul_net(empty_input)
+        bias = self.bias_net(empty_input)
+        return (y - bias)/mul
+    def logdet(self):
+        return self._log_mul.sum(3).sum(2).sum(1)
+
 
 def fft_conv3x3(x,weight):
     bs,c,h,w = x.shape
@@ -145,9 +178,10 @@ def inverse_fft_conv3x3_pytorch(x,weight):
 
     # Transform weights to fourier #(flip the filter because cross-correlation not convolution)
     padded_weight = F.pad(weight,((w-3)//2,(w-3)//2+(w-3)%2,(w-3)//2,(w-3)//2+(w-3)%2))
-    padded_weight[...,1]*=-1 #complex conjugate #(something wrong with pytorch here, doesn't make difference)
+    
     fft_weight = torch.rfft(padded_weight,2,onesided=False,normalized=False)
     phi_fft_weight = phi(fft_weight)
+    #phi_fft_weight[...,1]*=-1 #complex conjugate #(something wrong with pytorch here, doesn't make difference)
     inverse_phi_fft_weight = torch.inverse(phi_fft_weight.permute(2,3,0,1)) #h,w,c,c
 
     # compute the product
@@ -180,3 +214,72 @@ def phi_inv_vec(v):
     """ inverse reallification for vectors"""
     a,b = torch.chunk(v,2,dim=1)
     return torch.stack([a,b],dim=len(v.shape))
+
+
+def Clip_OperatorNorm_NP(filter, inp_shape, clip_to):
+    # compute the singular values using FFT
+    # first compute the transforms for each pair of input and output channels
+    transform_coeff = np.fft.fft2(filter, inp_shape, axes=[0, 1])
+
+    # now, for each transform coefficient, compute the singular values of the
+    # matrix obtained by selecting that coefficient for
+    # input-channel/output-channel pairs
+    U, D, V = np.linalg.svd(transform_coeff, compute_uv=True, full_matrices=False)
+    if clip_to[1]: D = np.minimum(D, clip_to[1])
+    if clip_to[0]: D = np.maximum(D,clip_to[0])
+    D_clipped = D
+    if filter.shape[2] > filter.shape[3]:
+        clipped_transform_coeff = np.matmul(U, D_clipped[..., None] * V)
+    else:
+        clipped_transform_coeff = np.matmul(U * D_clipped[..., None, :], V)
+    print(clipped_transform_coeff.shape)
+    clipped_filter = np.fft.ifft2(clipped_transform_coeff, axes=[0, 1]).real
+    args = [range(d) for d in filter.shape]
+    return clipped_filter[np.ix_(*args)]
+
+def Clip_OperatorNorm(filter_pt,inp_shape,clip_to):
+    """ inp_shape shoud be tuple of form (h,w) and clip_to (low or None,high or None)"""
+    filter_np = filter_pt.cpu().data.permute((2,3,0,1)).numpy()
+    clipped_filter_pt = torch.from_numpy(Clip_OperatorNorm_NP(filter_np,inp_shape,clip_to).transpose(2,3,0,1)).float().to(filter_pt.device)
+
+    return clipped_filter_pt
+
+
+try:
+    from batch_svd import batch_svd
+except ModuleNotFoundError:
+    def batch_svd(*args,**kwargs):
+        raise NotImplementedError
+
+def svd(x):
+    # https://discuss.pytorch.org/t/multidimensional-svd/4366/2
+    batches = x.shape[:-2]
+    if batches:
+        n, m = x.shape[-2:]
+        k = min(n, m)
+        U, d, V = x.new(*batches, n, k), x.new(*batches, k), x.new(*batches, m, k)
+        for idx in itertools.product(*map(range, batches)):
+            U[idx], d[idx], V[idx] = torch.svd(x[idx])
+        return U, d, V
+    else:
+        return torch.svd(x)
+
+def Clip_OperatorNorm_PT(filter_pt,inp_shape,clip_to):
+    c1,c2= filter_pt.shape[:2]
+    h,w = inp_shape
+    padded_weight = F.pad(filter_pt,(0,h-3,0,w-3))
+    w_fft = torch.rfft(padded_weight, 2, onesided=False, normalized=False)
+    phi_fft_weight = phi(w_fft)
+    U,S,V = svd(phi_fft_weight.data.permute((2,3,0,1)).reshape(-1,2*c1,2*c2))
+    if clip_to[1]: S = torch.clamp(S, max=clip_to[1])
+    if clip_to[0]: S = torch.clamp(S, min=clip_to[0])
+    S_clipped = S
+    if filter_pt.shape[2] > filter_pt.shape[3]:
+        clipped_transform_coeff = torch.matmul(U, S_clipped[..., None] * V)
+    else:
+        clipped_transform_coeff = torch.matmul(U * S_clipped[..., None, :], V)
+    print(clipped_transform_coeff.shape)
+    clipped_complex = phi_inv(clipped_transform_coeff.view(h,w,2*c1,2*c2).permute((2,3,0,1)))
+    clipped_filter_coeffs = torch.irfft(clipped_complex,2,onesided=False,normalized=False)
+    print(clipped_filter_coeffs)
+

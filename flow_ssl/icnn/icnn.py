@@ -6,9 +6,9 @@ from torch.distributions.normal import Normal
 import numpy as np
 from ..utils import export, Named, Expression
 from ..conv_parts import ResBlock,conv2d
-from ..invertible import SqueezeLayer,padChannels,keepChannels,NNdownsample,iAvgPool2d
+from ..invertible import SqueezeLayer,padChannels,keepChannels,NNdownsample,iAvgPool2d#iSequential2
 from ..invertible import iLogits, iBN, MeanOnlyBN, iSequential, passThrough, addZslot, Join, pad_circular_nd
-from ..invertible import  iConv2d, iSLReLU,iConv1x1,Flatten,RandomPadChannels,iLeakyReLU,iCoordInjection
+from ..invertible import  iConv2d, iSLReLU,iConv1x1,Flatten,RandomPadChannels,iLeakyReLU,iCoordInjection,iSimpleCoords
 import scipy as sp
 import scipy.sparse
 
@@ -16,8 +16,11 @@ import scipy.sparse
 def iConvSelu(channels):
     return iSequential(iConv2d(channels,channels),iSLReLU())
 
+def iCoordSelu(channels):
+    return iSequential(iConv2d(channels,channels),iSLReLU(),iCoordInjection(channels))
+
 def iConvBNselu(channels):
-    return iSequential(iConv2d(channels,channels),iBN(channels),iLeakyReLU())#iSLReLU())
+    return iSequential(iConv2d(channels,channels),iBN(channels),iSLReLU())#iSLReLU())
 
 def StandardNormal(d):
     return Independent(Normal(torch.zeros(d).cuda(),torch.ones(d).cuda()),1)
@@ -152,7 +155,7 @@ class MultiScaleiCNNv2(MultiScaleiCNN):
 
 @export
 class iCNN3d(FlowNetwork):
-    def __init__(self, in_channels=3, num_classes=10):
+    def __init__(self, in_channels=3, num_classes=10,res=32):
         super().__init__()
         self.num_classes = num_classes
         self.body = iSequential(
@@ -176,36 +179,104 @@ class iCNN3d(FlowNetwork):
         )
         self.classifier_head = nn.Sequential(
             Expression(lambda u:u.mean(-1).mean(-1)),
-            nn.Linear(192,num_classes)
+            nn.Linear(64*in_channels,num_classes)
         )
         self.flow = iSequential(self.body,Flatten())
-        self.prior = StandardNormal(3*32*32)
+        self.prior = StandardNormal(in_channels*res*res)
+
 
 @export
-class iLinear3d(iCNN3d):
+class iCNN3d2(FlowNetwork):
+    def __init__(self, in_channels=3, num_classes=10,res=32):
+        super().__init__()
+        self.num_classes = num_classes
+        self.body = nn.Sequential(
+            conv2d(in_channels,in_channels),
+            nn.ReLU(),
+            conv2d(in_channels,in_channels),
+            nn.ReLU(),
+            conv2d(in_channels,in_channels),
+            nn.ReLU(),
+            NNdownsample(),
+            conv2d(4*in_channels,4*in_channels),
+            nn.ReLU(),
+            conv2d(4*in_channels,4*in_channels),
+            nn.ReLU(),
+            conv2d(4*in_channels,4*in_channels),
+            nn.ReLU(),
+            NNdownsample(),
+            conv2d(16*in_channels,16*in_channels),
+            nn.ReLU(),
+            conv2d(16*in_channels,16*in_channels),
+            nn.ReLU(),
+            conv2d(16*in_channels,16*in_channels),
+            nn.ReLU(),
+            NNdownsample(),
+            conv2d(64*in_channels,64*in_channels),
+            nn.ReLU(),
+            conv2d(64*in_channels,64*in_channels),
+            nn.ReLU(),
+            conv2d(64*in_channels,64*in_channels),
+            nn.ReLU(),
+        )
+        self.classifier_head = nn.Sequential(
+            Expression(lambda u:u.mean(-1).mean(-1)),
+            nn.Linear(64*in_channels,num_classes)
+        )
+        self.flow = iSequential(self.body,Flatten())
+        self.prior = StandardNormal(in_channels*res*res)
 
-    def __init__(self, num_classes=10):
+@export
+class iCNN3dCoords(FlowNetwork):
+    def __init__(self, in_channels=3, num_classes=10,res=32):
         super().__init__()
         self.num_classes = num_classes
         self.body = iSequential(
             iLogits(),
-            iConv2d(3,3),
+            *[iCoordSelu(in_channels) for i in range(3)],
+            iAvgPool2d(),
+            *[iCoordSelu(4*in_channels) for i in range(3)],
+            iAvgPool2d(),
+            *[iCoordSelu(16*in_channels) for i in range(3)],
+            iAvgPool2d(),
+            *[iCoordSelu(64*in_channels) for i in range(3)],
+            iConv2d(64*in_channels,64*in_channels),
+        )
+        self.classifier_head = nn.Sequential(
+            Expression(lambda u:u.mean(-1).mean(-1)),
+            nn.Linear(64*in_channels,num_classes)
+        )
+        self.flow = iSequential(self.body,Flatten())
+        self.prior = StandardNormal(in_channels*res*res)
+
+@export
+class iLinear3d(iCNN3d):
+
+    def __init__(self, num_classes=10,res=32):
+        super().__init__()
+        self.num_classes = num_classes
+        self.body = iSequential(
+            iLogits(),
             iCoordInjection(3),
             iConv2d(3,3),
             iConv2d(3,3),
+            iConv2d(3,3),
             iAvgPool2d(),
-            iConv2d(12,12),
+
             iCoordInjection(12),
             iConv2d(12,12),
             iConv2d(12,12),
+            iConv2d(12,12),
             iAvgPool2d(),
-            iConv2d(48,48),
+
             iCoordInjection(48),
             iConv2d(48,48),
             iConv2d(48,48),
+            iConv2d(48,48),
             iAvgPool2d(),
-            iConv2d(192,192),
             iCoordInjection(192),
+            
+            iConv2d(192,192),
             iConv2d(192,192),
             iConv2d(192,192),
         )
@@ -214,4 +285,4 @@ class iLinear3d(iCNN3d):
             nn.Linear(192,num_classes)
         )
         self.flow = iSequential(self.body,Flatten())
-        self.prior = StandardNormal(3*32*32)
+        self.prior = StandardNormal(3*res*res)

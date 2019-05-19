@@ -24,6 +24,9 @@ class iSequential(torch.nn.Sequential):
             log_det += module.logdet()
         return log_det
 
+# @export
+# class iSequential2(torch.nn.Sequential): pass
+
 @export
 class addZslot(nn.Module):
     def __init__(self):

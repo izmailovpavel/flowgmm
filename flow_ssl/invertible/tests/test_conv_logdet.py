@@ -1,6 +1,6 @@
 import numpy as np
 from flow_ssl.invertible.coupling_layers import iConv2d,fft_conv3x3,inverse_fft_conv3x3,inverse_fft_conv3x3_pytorch
-from flow_ssl.invertible.coupling_layers import phi, phi_inv, phi_vec, phi_inv_vec
+from flow_ssl.invertible.coupling_layers import phi, phi_inv, phi_vec, phi_inv_vec,Clip_OperatorNorm,Clip_OperatorNorm_PT
 import torch
 import torch.nn.functional as F
 import unittest
@@ -78,6 +78,22 @@ class TestFFTConv(unittest.TestCase):
         rel_error = (ifft_output-x).norm()/x.norm()
         #print(rel_error)
         self.assertLess(rel_error, 1e-4)
+
+    def test_clipping_pytorch(self):
+        w=h = 3
+        channels = 1
+
+        torch.random.manual_seed(2019)
+        x = torch.randn(1,channels,h,w).cuda()
+        layer = iConv2d(channels,channels).cuda()
+        
+        conv_output = layer(x) - layer.conv.bias[None,:,None,None]
+        clipped = Clip_OperatorNorm_PT(layer.conv.weight,(h,w),(.01,None))
+        #print(ifft_output)
+        #print(x)
+        # rel_error = (ifft_output-x).norm()/x.norm()
+        # #print(rel_error)
+        # self.assertLess(rel_error, 1e-4)
 
     def test_phi(self):
         C = torch.randn(5,5,8,8,2)

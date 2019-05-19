@@ -1,5 +1,5 @@
 import os
-from oil.datasetup.datasets import CIFAR10,CIFAR100
+from oil.datasetup.datasets import CIFAR10,CIFAR100,CelebA
 from oil.model_trainers.classifier import Classifier,simpleClassifierTrial
 # from resnets import SplitODEResnet,ODEResnet,LongResnet,RNNBottle
 # from resnets import SmallResnet,RNNResnet
@@ -9,16 +9,16 @@ from oil.tuning.study import Study, train_trial
 # from oil.tuning.configGenerator import uniform,logUniform
 # from invertible.flow import simpleFlowTrial
 # from invertible.iEluNetwork import iEluNet,iEluNetMultiScale,iEluNetMultiScaleLarger,iEluNet3d,iLinear
-from flow import simpleFlowTrial
-from flow_ssl.icnn.icnn import iLinear3d
-log_dir_base = os.path.expanduser('~/tb-experiments/linear_coords_avgpool')
+from flow_ssl.flow_trainer import simpleFlowTrial
+from flow_ssl.icnn.icnn import iLinear3d,iCNN3dCoords
+log_dir_base = os.path.expanduser('~/tb-experiments/nonlinear_sigmoidcoords')
 cfg_spec = {
-    'dataset': [CIFAR10],
-    'network': [iLinear3d],
-    'net_config': {},
+    'dataset': [CelebA],
+    'network': [iCNN3dCoords],
+    'net_config': {'res':64},
     'loader_config': {'amnt_dev':5000,'lab_BS':50},
     'opt_config':{'lr':[.0003]},
-    'num_epochs':30, 
+    'num_epochs':10, 
     'trainer_config':{'log_dir':lambda cfg:log_dir_base+\
         '/{}/{}/{}'.format(cfg['dataset'],cfg['network'],cfg['opt_config']['lr'])}
     }
