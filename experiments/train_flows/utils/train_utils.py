@@ -80,7 +80,7 @@ def sample(net, prior, batch_size, cls, device, sample_shape):
         return x
 
 
-def test_classifier(epoch, net, testloader, device, loss_fn, writer=None):
+def test_classifier(epoch, net, testloader, device, loss_fn, writer=None, postfix=""):
     net.eval()
     loss_meter = AverageMeter()
     jaclogdet_meter = AverageMeter()
@@ -106,7 +106,7 @@ def test_classifier(epoch, net, testloader, device, loss_fn, writer=None):
                                      acc=acc_meter.avg)
                 progress_bar.update(x.size(0))
     if writer is not None:
-        writer.add_scalar("test/loss", loss_meter.avg, epoch)
-        writer.add_scalar("test/acc", acc_meter.avg, epoch)
-        writer.add_scalar("test/bpd", bits_per_dim(x, loss_meter.avg), epoch)
-        writer.add_scalar("test/jaclogdet", jaclogdet_meter.avg, epoch)
+        writer.add_scalar("test/loss{}".format(postfix), loss_meter.avg, epoch)
+        writer.add_scalar("test/acc{}".format(postfix), acc_meter.avg, epoch)
+        writer.add_scalar("test/bpd{}".format(postfix), bits_per_dim(x, loss_meter.avg), epoch)
+        writer.add_scalar("test/jaclogdet{}".format(postfix), jaclogdet_meter.avg, epoch)

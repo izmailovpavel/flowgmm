@@ -252,7 +252,7 @@ def Clip_OperatorNorm(filter_pt,inp_shape,clip_to):
 
 try:
     from batch_svd import batch_svd
-except ModuleNotFoundError:
+except ImportError:
     def batch_svd(*args,**kwargs):
         raise NotImplementedError
 

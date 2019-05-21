@@ -23,6 +23,7 @@ from flow_ssl.realnvp import RealNVP
 from flow_ssl import FlowLoss
 from flow_ssl.distributions import SSLGaussMixture
 from flow_ssl.data import make_ssl_data_loaders
+from flow_ssl.data import make_sup_data_loaders
 from flow_ssl.data import NO_LABEL
 from flow_ssl.data import TransformTwice
 
@@ -167,6 +168,11 @@ parser.add_argument('--consistency_weight', default=1., type=float,
 parser.add_argument('--eval_freq', default=1, type=int, help='Number of epochs between evaluation')
 parser.add_argument('--consistency_rampup', default=1, type=int, help='Number of epochs for consistency loss rampup')
 
+parser.add_argument('--swa', action='store_true', help='SWA (default: off)')
+parser.add_argument('--swa_start', type=float, default=0, metavar='N', help='Steps before SWA start (default: 0)')
+parser.add_argument('--swa_freq', type=float, default=10, metavar='N', help='SWA upd freq (default: 10)')
+parser.add_argument('--swa_lr', type=float, default=0.001, metavar='LR', help='SWA LR (default: 0.001)')
+
 
 args = parser.parse_args()
 
@@ -214,6 +220,18 @@ trainloader, testloader, _ = make_ssl_data_loaders(
         transform_test, 
         use_validation=args.use_validation,
         dataset=args.dataset.lower())
+
+if args.swa:
+    bn_loader, _, _ = make_sup_data_loaders(
+            args.data_path, 
+            args.batch_size, 
+            args.num_workers, 
+            transform_train.transform, 
+            transform_test, 
+            use_validation=args.use_validation,
+            shuffle_train=True,
+            dataset=args.dataset.lower())
+    
 
 # Model
 print('Building {} model...'.format(args.flow))
@@ -270,6 +288,14 @@ if args.optimizer == "SGD":
     optimizer = optim.SGD(param_groups, lr=args.lr)
 elif args.optimizer == "Adam":
     optimizer = optim.Adam(param_groups, lr=args.lr)
+else:
+    raise ValueError("Unknown optimizer {}".format(args.optimizer))
+
+if args.swa:
+    from torchcontrib.optim import SWA
+    optimizer = optim.SGD(param_groups, lr=args.lr)
+    optimizer = SWA(optimizer, args.swa_start, args.swa_freq, args.swa_lr)
+
 
 for epoch in range(start_epoch, args.num_epochs):
 
@@ -303,6 +329,13 @@ for epoch in range(start_epoch, args.num_epochs):
     # Save samples and data
     if epoch % args.eval_freq == 0:
         utils.test_classifier(epoch, net, testloader, device, loss_fn, writer)
+        if args.swa:
+            optimizer.swap_swa_sgd() 
+            print("updating bn")
+            SWA.bn_update(bn_loader, net)
+            utils.test_classifier(epoch, net, testloader, device, loss_fn, 
+                    writer, postfix="_swa")
+
         mean_imgs = torchvision.utils.make_grid(
                 means.reshape((10, *img_shape)), nrow=5)
         writer.add_image("means", mean_imgs)
@@ -320,3 +353,6 @@ for epoch in range(start_epoch, args.num_epochs):
         os.makedirs(args.ckptdir, exist_ok=True)
         torchvision.utils.save_image(images_concat, 
                                     os.path.join(args.ckptdir, 'samples/epoch_{}.png'.format(epoch)))
+
+        if args.swa:
+            optimizer.swap_swa_sgd() 
