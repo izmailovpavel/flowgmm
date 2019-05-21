@@ -39,7 +39,8 @@ class iConv2d(nn.Module):
         D = phi(w_fft).permute(2,3,0,1)
         Dt = D.permute(0, 1, 3, 2) #transpose of D
         lhs = torch.matmul(D, Dt)
-        chol_output = torch.cholesky(lhs+1e-5*torch.eye(lhs.size(-1)).to(lhs.device))
+        scale = lhs.data.norm().detach()/np.sqrt(np.prod(Dt.shape))
+        chol_output = torch.cholesky(lhs+3e-5*scale*torch.eye(lhs.size(-1)).to(lhs.device))
         eigs = torch.diagonal(chol_output,dim1=-2,dim2=-1)
         logdet = (eigs.log().sum() / 2.0).expand(bs)
         # 1/4 \sum_{h,w} log det (DDt)
@@ -52,9 +53,9 @@ class ClippediConv2d(iConv2d):
         self.fwd_count = 0
     def forward(self,x):
         if self.training:
-            self.fwd_count+=1
             if self.fwd_count%1000==0:
                 self.conv.weight.data = Clip_OperatorNorm(self.conv.weight.data,x.shape[2:],self.clip_sigmas)
+            self.fwd_count+=1
         return super().forward(x)
 
 @export
@@ -225,23 +226,27 @@ def Clip_OperatorNorm_NP(filter, inp_shape, clip_to):
     # matrix obtained by selecting that coefficient for
     # input-channel/output-channel pairs
     U, D, V = np.linalg.svd(transform_coeff, compute_uv=True, full_matrices=False)
-    if clip_to[1]: D = np.minimum(D, clip_to[1])
-    if clip_to[0]: D = np.maximum(D,clip_to[0])
+    if clip_to[1] is not None: D = np.minimum(D, clip_to[1])
+    if clip_to[0] is not None: D = np.maximum(D,clip_to[0])
     D_clipped = D
     if filter.shape[2] > filter.shape[3]:
         clipped_transform_coeff = np.matmul(U, D_clipped[..., None] * V)
     else:
         clipped_transform_coeff = np.matmul(U * D_clipped[..., None, :], V)
-    print(clipped_transform_coeff.shape)
+    #print(clipped_transform_coeff.shape)
     clipped_filter = np.fft.ifft2(clipped_transform_coeff, axes=[0, 1]).real
+    #print(clipped_filter)
     args = [range(d) for d in filter.shape]
     return clipped_filter[np.ix_(*args)]
 
 def Clip_OperatorNorm(filter_pt,inp_shape,clip_to):
     """ inp_shape shoud be tuple of form (h,w) and clip_to (low or None,high or None)"""
+    # s = singularValues(filter_pt.permute(2,3,0,1).cpu().data,inp_shape)
+    # print(s.min(),s.max())
     filter_np = filter_pt.cpu().data.permute((2,3,0,1)).numpy()
     clipped_filter_pt = torch.from_numpy(Clip_OperatorNorm_NP(filter_np,inp_shape,clip_to).transpose(2,3,0,1)).float().to(filter_pt.device)
-
+    # s = singularValues(clipped_filter_pt.permute(2,3,0,1).cpu().data,inp_shape)
+    # print(s.min(),s.max())
     return clipped_filter_pt
 
 
@@ -264,22 +269,38 @@ def svd(x):
     else:
         return torch.svd(x)
 
+def singularValues(kernel,input_shape):
+    transforms = np.fft.fft2(kernel,input_shape,axes=(0,1))
+    return np.linalg.svd(transforms,compute_uv=False)
+
 def Clip_OperatorNorm_PT(filter_pt,inp_shape,clip_to):
     c1,c2= filter_pt.shape[:2]
     h,w = inp_shape
+    # s = singularValues(filter_pt.permute(2,3,0,1).cpu().data,(h,w))
+    # print(s.min(),s.max())
     padded_weight = F.pad(filter_pt,(0,h-3,0,w-3))
     w_fft = torch.rfft(padded_weight, 2, onesided=False, normalized=False)
+    #w_fft[...,1]*=-1
     phi_fft_weight = phi(w_fft)
     U,S,V = svd(phi_fft_weight.data.permute((2,3,0,1)).reshape(-1,2*c1,2*c2))
-    if clip_to[1]: S = torch.clamp(S, max=clip_to[1])
-    if clip_to[0]: S = torch.clamp(S, min=clip_to[0])
+    if clip_to[1] is not None: S = torch.clamp(S, max=clip_to[1])
+    if clip_to[0] is not None: S = torch.clamp(S, min=clip_to[0])
+    #print("s_shape",S.shape,U.shape,V.shape)
     S_clipped = S
     if filter_pt.shape[2] > filter_pt.shape[3]:
-        clipped_transform_coeff = torch.matmul(U, S_clipped[..., None] * V)
+        clipped_transform_coeff = torch.matmul(U, S_clipped[..., None] * V.permute(0,2,1))
     else:
-        clipped_transform_coeff = torch.matmul(U * S_clipped[..., None, :], V)
-    print(clipped_transform_coeff.shape)
-    clipped_complex = phi_inv(clipped_transform_coeff.view(h,w,2*c1,2*c2).permute((2,3,0,1)))
+        clipped_transform_coeff = torch.matmul(U * S_clipped[..., None, :], V.permute(0,2,1))
+    reshaped = clipped_transform_coeff.view(h,w,2*c1,2*c2).permute((2,3,0,1))
+    #print("norm",(reshaped.data-phi_fft_weight.data).norm()/phi_fft_weight.norm())
+    clipped_complex = phi_inv(reshaped)
     clipped_filter_coeffs = torch.irfft(clipped_complex,2,onesided=False,normalized=False)
-    print(clipped_filter_coeffs)
+    #print(clipped_filter_coeffs)
+    args = [range(d) for d in filter_pt.shape]
+    filter3x3 = clipped_filter_coeffs[np.ix_(*args)]
+    #print(clipped_filter_coeffs)
 
+
+    # s = singularValues(filter3x3.permute(2,3,0,1).cpu().data,(h,w))
+    # print(s.min(),s.max())
+    return filter3x3

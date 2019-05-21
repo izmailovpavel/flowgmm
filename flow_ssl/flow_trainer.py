@@ -7,6 +7,7 @@ import itertools
 import os
 import torch.nn.functional as F
 from oil.model_trainers.trainer import Trainer
+from oil.model_trainers.classifier import Classifier
 import scipy.misc
 from itertools import islice
 import numpy as np
@@ -45,7 +46,36 @@ class Flow(Trainer):
         with Eval(self.model):
             nll = self.evalAverageMetrics(loader,nll_func)
         return {'bpd':(nll + np.log(256))/np.log(2)}
+
+class iClassifier(Classifier):
     
+    def __init__(self, *args,ld_weight=1000., **kwargs):
+        super().__init__(*args, **kwargs)
+        self.hypers['ld_weight'] = ld_weight
+        #self.fixed_input = (self.G.sample_z(32),)
+
+    def loss(self, minibatch):
+        """ Standard cross-entropy loss """
+        x,y = minibatch
+        CE = super().loss(minibatch)
+        return  CE - self.hypers['ld_weight']*self.model[1].body.logdet().mean()/np.prod(x.shape[1:])
+
+    def logStuff(self, step, minibatch=None):
+        """ Handles Logging and any additional needs for subclasses,
+            should have no impact on the training """
+
+        # metrics = {}
+        # try: metrics['FID'],metrics['IS'] = FID_and_IS(self.as_dataloader(),self.dataloaders['dev'])
+        # except KeyError: pass
+        # self.logger.add_scalars('metrics', metrics, step)
+        # if hasattr(self.model[1],'sample') and minibatch is not None:
+        #     with Eval(self.model):
+        #         self.model[1].flow(minibatch[0]) # Forward through network to populate shape info
+        #         with torch.no_grad():
+        #             fake_images = self.model[1].sample(32).cpu().data
+        #     img_grid = vutils.make_grid(fake_images, normalize=True)
+        #     self.logger.add_image('samples', img_grid, step)
+        super().logStuff(step,minibatch)
 
 from torch.utils.data import DataLoader
 from oil.utils.utils import LoaderTo, cosLr, recursively_update,islice
@@ -56,6 +86,34 @@ from oil.architectures.img_classifiers import layer13s
 #from invertible.iresnet import iResnet,iResnetLarge
 from flow_ssl.icnn.icnn import iCNN
 import collections
+
+
+def simpleiClassifierTrial(strict=False):
+    def makeTrainer(config):
+        cfg = {
+            'dataset': CIFAR10,'network':layer13s,'net_config': {},
+            'loader_config': {'amnt_dev':5000,'lab_BS':32, 'pin_memory':True,'num_workers':2},
+            'opt_config':{'lr':.3e-4},#, 'momentum':.9, 'weight_decay':1e-4,'nesterov':True},
+            'num_epochs':100,'trainer_config':{},
+            }
+        recursively_update(cfg,config)
+        trainset = cfg['dataset']('~/datasets/{}/'.format(cfg['dataset']),flow=True)
+        device = torch.device('cuda')
+        fullCNN = torch.nn.Sequential(
+            trainset.default_aug_layers(),
+            cfg['network'](num_classes=trainset.num_classes,**cfg['net_config']).to(device)
+        )
+        dataloaders = {}
+        dataloaders['train'], dataloaders['dev'] = getLabLoader(trainset,**cfg['loader_config'])
+        dataloaders['Train'] = islice(dataloaders['train'],10000//cfg['loader_config']['lab_BS'])
+        if len(dataloaders['dev'])==0:
+            testset = cfg['dataset']('~/datasets/{}/'.format(cfg['dataset']),train=False)
+            dataloaders['test'] = DataLoader(testset,batch_size=cfg['loader_config']['lab_BS'],shuffle=False)
+        dataloaders = {k:LoaderTo(v,device) for k,v in dataloaders.items()}
+        opt_constr = lambda params: torch.optim.Adam(params, **cfg['opt_config'])#torch.optim.SGD(params, **cfg['opt_config'])
+        lr_sched = cosLr(cfg['num_epochs'])
+        return iClassifier(fullCNN,dataloaders,opt_constr,lr_sched,**cfg['trainer_config'])
+    return train_trial(makeTrainer,strict)
 
 def simpleFlowTrial(strict=False):
     def makeTrainer(config):

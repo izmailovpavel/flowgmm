@@ -8,10 +8,7 @@ from torch.nn import functional as F
 class iSequential(torch.nn.Sequential):
 
     def inverse(self,y):
-        j = len(self._modules.values())
         for module in reversed(self._modules.values()):
-            j -=1
-            #print(f"Inverting layer{j} with module {module}")
             assert hasattr(module,'inverse'), '{} has no inverse defined'.format(module)
             y = module.inverse(y)
         return y
@@ -19,13 +16,9 @@ class iSequential(torch.nn.Sequential):
     def logdet(self):
         log_det = 0
         for module in self._modules.values():
-            #print(module)
             assert hasattr(module,'logdet'), '{} has no logdet defined'.format(module)
             log_det += module.logdet()
         return log_det
-
-# @export
-# class iSequential2(torch.nn.Sequential): pass
 
 @export
 class addZslot(nn.Module):
@@ -159,7 +152,7 @@ class ActNormScale(nn.Module):
             x_var = (x**2).mean(dim=(0, 2, 3)).view_as(self.scale)
             self.log_scale.data = -torch.log(x_var + 1e-6) / 2
             self.initialized = True
-        self._logdet = x.shape[2] * x.shape[3] * self.log_scale.sum().item()
+        self._logdet = x.shape[2] * x.shape[3] * self.log_scale.sum().expand(x.shape[0])
         #print("ActNorm scale:", ((x * self.scale)**2).mean(dim=(0, 2, 3)))
         return x * self.scale
 
@@ -168,3 +161,4 @@ class ActNormScale(nn.Module):
 
     def logdet(self):
         return self._logdet
+    

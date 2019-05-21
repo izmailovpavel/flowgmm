@@ -115,7 +115,7 @@ class MultiScaleiCNN(iCNN):
 
 @export
 class MultiScaleiCNNv2(MultiScaleiCNN):
-    def __init__(self, num_classes=10,k=128):
+    def __init__(self, num_classes=10,k=64):
         super().__init__(num_classes,k)
         self.num_classes = num_classes
         self.k = k
@@ -124,23 +124,23 @@ class MultiScaleiCNNv2(MultiScaleiCNN):
             RandomPadChannels(k-3),
             addZslot(),
 
-            passThrough(*iConvBNselu(k)),
-            passThrough(*iConvBNselu(k)),
-            passThrough(*iConvBNselu(k)),
+            passThrough(*iConvSelu(k)),
+            passThrough(*iConvSelu(k)),
+            passThrough(*iConvSelu(k)),
             passThrough(NNdownsample()),
             passThrough(iConv1x1(4*k)),
             keepChannels(2*k),
             
-            passThrough(*iConvBNselu(2*k)),
-            passThrough(*iConvBNselu(2*k)),
-            passThrough(*iConvBNselu(2*k)),
+            passThrough(*iConvSelu(2*k)),
+            passThrough(*iConvSelu(2*k)),
+            passThrough(*iConvSelu(2*k)),
             passThrough(NNdownsample()),
             passThrough(iConv1x1(8*k)),
-            keepChannels(4*k),
+            keepChannels(2*k),
             
-            passThrough(*iConvBNselu(2*k)),
-            passThrough(*iConvBNselu(2*k)),
-            passThrough(*iConvBNselu(2*k)),
+            passThrough(*iConvSelu(2*k)),
+            passThrough(*iConvSelu(2*k)),
+            passThrough(*iConvSelu(2*k)),
             passThrough(iConv2d(2*k,2*k)),
             Join(),
         )

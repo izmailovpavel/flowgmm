@@ -61,6 +61,8 @@ class iBN(nn.BatchNorm2d):
     # See https://github.com/vacancy/Synchronized-BatchNorm-PyTorch/issues/14
     def __init__(self, *args,**kwargs):
         super().__init__(*args,**kwargs)
+        self.weight.data/= self.weight.data
+        self.bias.data-=self.bias.data
         if 'affine' in kwargs:
             assert kwargs['affine'], "only affine supported"
 
