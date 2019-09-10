@@ -12,14 +12,14 @@ from oil.tuning.study import Study, train_trial
 from flow_ssl.flow_trainer import simpleFlowTrial
 from flow_ssl.icnn.icnn import iLinear3d,iCNN,MultiScaleiCNNv2,MultiScaleiCNN,iCNN3d
 from flow_ssl.iresnet import iResnet
-log_dir_base = os.path.expanduser('~/tb-experiments/icnn_repro_nobn_long')
+log_dir_base = os.path.expanduser('~/tb-experiments/icnn_repro_nobn_long_larger')
 cfg_spec = {
     'dataset': [CIFAR10],
     'network': [MultiScaleiCNNv2],
-    'net_config': {'k':64},
+    'net_config': {'k':96},
     'loader_config': {'amnt_dev':5000,'lab_BS':32},
     'opt_config':{'lr':[.0003]},
-    'num_epochs':10*(3,), 
+    'num_epochs':10*(5,), 
     'trainer_config':{'log_dir':lambda cfg:log_dir_base+\
         '/{}/{}/{}'.format(cfg['dataset'],cfg['network'],cfg['opt_config']['lr'])}
     }

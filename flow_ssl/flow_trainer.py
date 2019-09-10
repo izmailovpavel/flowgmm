@@ -49,31 +49,43 @@ class Flow(Trainer):
 
 class iClassifier(Classifier):
     
-    def __init__(self, *args,ld_weight=1000., **kwargs):
+    def __init__(self, *args, ld_weight=1000.,kp=1/2, **kwargs):
         super().__init__(*args, **kwargs)
         self.hypers['ld_weight'] = ld_weight
+        self.hypers['kp'] = kp
+        self.rel_err=1
         #self.fixed_input = (self.G.sample_z(32),)
-
     def loss(self, minibatch):
         """ Standard cross-entropy loss """
         x,y = minibatch
         CE = super().loss(minibatch)
-        return  CE - self.hypers['ld_weight']*self.model[1].body.logdet().mean()/np.prod(x.shape[1:])
+        barrier_function = lambda x: 1/x + x**2
+        p = self.rel_err**self.hypers['kp']
+        return  CE + self.hypers['ld_weight']*p*self.model[1].body.reduce_func_singular_values(barrier_function).mean()/np.prod(x.shape[1:])
+        #return  CE - self.hypers['ld_weight']*self.model[1].body.logdet().mean()/np.prod(x.shape[1:])
 
     def logStuff(self, step, minibatch=None):
         """ Handles Logging and any additional needs for subclasses,
             should have no impact on the training """
-
-        # metrics = {}
-        # try: metrics['FID'],metrics['IS'] = FID_and_IS(self.as_dataloader(),self.dataloaders['dev'])
-        # except KeyError: pass
-        # self.logger.add_scalars('metrics', metrics, step)
-        # if hasattr(self.model[1],'sample') and minibatch is not None:
+        with Eval(self.model), torch.no_grad():
+            if minibatch is not None:
+                z = self.model[1].body(minibatch[0])
+                reconstructed = self.model[1].body.inverse(z)
+                rel_err = (torch.mean((minibatch[0]-reconstructed)**2).sqrt()\
+                    /torch.mean(minibatch[0]**2).sqrt()).cpu().data.numpy()
+                if rel_err<0.03:
+                    self.hypers['ld_weight']*=.8
+                elif rel_err>0.06:
+                    self.hypers['ld_weight']*=1.25
+                self.rel_err = rel_err
+                p = self.rel_err**self.hypers['kp']
+                self.logger.add_scalars('info', {'recons_err':rel_err,'ld_weight':self.hypers['ld_weight'],'p':p}, step)
+        # if hasattr(self.model,'sample') and minibatch is not None:
         #     with Eval(self.model):
-        #         self.model[1].flow(minibatch[0]) # Forward through network to populate shape info
+        #         self.model.nll(minibatch[0]) # Forward through network to populate shape info
         #         with torch.no_grad():
-        #             fake_images = self.model[1].sample(32).cpu().data
-        #     img_grid = vutils.make_grid(fake_images, normalize=True)
+        #             fake_images = self.model.sample(32).cpu().data
+        #     img_grid = vutils.make_grid(fake_images, normalize=False,range=(0,1))
         #     self.logger.add_image('samples', img_grid, step)
         super().logStuff(step,minibatch)
 

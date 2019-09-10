@@ -20,6 +20,13 @@ class iSequential(torch.nn.Sequential):
             log_det += module.logdet()
         return log_det
 
+    def reduce_func_singular_values(self,func):
+        val = 0
+        for module in self._modules.values():
+            if hasattr(module,'reduce_func_singular_values'):
+                val += module.reduce_func_singular_values(func)
+        return val
+
 @export
 class addZslot(nn.Module):
     def __init__(self):
@@ -102,6 +109,13 @@ class both(nn.Module):
         return self.module1.inverse(y),self.module2.inverse(z_out)
     def logdet(self):
         return self.module1.logdet() + self.module2.logdet()
+    def reduce_func_singular_values(self,func):
+        out = 0
+        if hasattr(self.module1,'reduce_func_singular_values'):
+            out +=self.module1.reduce_func_singular_values(func)
+        if hasattr(self.module2,'reduce_func_singular_values'):
+            out +=self.module2.reduce_func_singular_values(func) 
+        return out
 
 
 @export

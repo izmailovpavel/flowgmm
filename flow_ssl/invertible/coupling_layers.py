@@ -45,6 +45,20 @@ class iConv2d(nn.Module):
         logdet = (eigs.log().sum() / 2.0).expand(bs)
         # 1/4 \sum_{h,w} log det (DDt)
         return logdet
+    def reduce_func_singular_values(self,func):
+        bs,c,h,w = self._shape
+        padded_weight = F.pad(self.conv.weight,(0,h-3,0,w-3))
+        w_fft = torch.rfft(padded_weight, 2, onesided=False, normalized=False)
+        # Lift to real valued space
+        D = phi(w_fft).permute(2,3,0,1)
+        Dt = D.permute(0, 1, 3, 2) #transpose of D
+        lhs = torch.matmul(D, Dt)
+        scale = lhs.data.norm().detach()/np.sqrt(np.prod(Dt.shape))
+        chol_output = torch.cholesky(lhs+1e-4*scale*torch.eye(lhs.size(-1)).to(lhs.device))
+        eigs = torch.diagonal(chol_output,dim1=-2,dim2=-1)
+        logdet = (func(eigs).sum() / 2.0).expand(bs)
+        # 1/4 \sum_{h,w} log det (DDt)
+        return logdet
 @export
 class ClippediConv2d(iConv2d):
     def __init__(self,*args,clip=(.01,None),**kwargs):
@@ -66,6 +80,7 @@ class iConv1x1(nn.Conv2d):
     def logdet(self):
         bs,c,h,w = self._input_shape
         return (torch.slogdet(self.weight[:,:,0,0])[1]*h*w).expand(bs)
+    
     def inverse(self,y):
         bs,c,h,w = self._input_shape
         inv_weight = torch.inverse(self.weight[:,:,0,0].double()).float().view(c, c, 1, 1)

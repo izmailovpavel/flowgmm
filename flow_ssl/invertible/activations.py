@@ -26,7 +26,14 @@ class iSLReLU(nn.Module):
         log_dets = torch.log((1+a*x/(torch.sqrt(1+x*x)))/(1+a))
         if len(x.shape)==2: return log_dets.sum(1)
         else: return log_dets.sum(3).sum(2).sum(1)
-
+    
+    def reduce_func_singular_values(self,func):
+        x = self._last_x
+        a = self.alpha
+        func_singular_vals = func((1+a*x/(torch.sqrt(1+x*x)))/(1+a))
+        if len(x.shape)==2: return func_singular_vals.sum(1)
+        else: return func_singular_vals.sum(3).sum(2).sum(1)
+    
 @export
 class iLeakyReLU(nn.LeakyReLU):
     def forward(self,x):
