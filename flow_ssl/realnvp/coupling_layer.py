@@ -149,17 +149,17 @@ class Rescale(nn.Module):
         return x
 
 
-class TabularCouplingLayer(CouplingLayerBase):
+class CouplingLayerTabular(CouplingLayerBase):
 
     def __init__(self, in_dim, mid_dim, num_layers, mask):
         
-        super(TabularCouplingLayer, self).__init__()
+        super(CouplingLayerTabular, self).__init__()
         self.mask = mask
         self.st_net = nn.Sequential(nn.Linear(in_dim, mid_dim),
                                  nn.ReLU(),
                                  *self._inner_seq(num_layers, mid_dim),
                                  nn.Linear(mid_dim, in_dim*2))
-        self.rescale = nn.utils.weight_norm(TabularRescale(in_dim))
+        self.rescale = nn.utils.weight_norm(RescaleTabular(in_dim))
                                  
     @staticmethod
     def _inner_seq(num_layers, mid_dim):
@@ -170,9 +170,9 @@ class TabularCouplingLayer(CouplingLayerBase):
         return res
 
 
-class TabularRescale(nn.Module):
+class RescaleTabular(nn.Module):
     def __init__(self, D):
-        super(TabularRescale, self).__init__()
+        super(RescaleTabular, self).__init__()
         self.weight = nn.Parameter(torch.ones(D))
 
     def forward(self, x):

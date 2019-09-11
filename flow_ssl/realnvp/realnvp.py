@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from flow_ssl.realnvp.coupling_layer import CouplingLayer
-from flow_ssl.realnvp.coupling_layer import TabularCouplingLayer
+from flow_ssl.realnvp.coupling_layer import CouplingLayerTabular
 from flow_ssl.realnvp.coupling_layer import MaskCheckerboard
 from flow_ssl.realnvp.coupling_layer import MaskChannelwise
 from flow_ssl.realnvp.coupling_layer import MaskTabular
@@ -98,14 +98,14 @@ class RealNVPMNIST(RealNVPBase):
             )
 
 
-class TabularRealNVP(RealNVPBase):
+class RealNVPTabular(RealNVPBase):
 
     def __init__(self, in_dim=2, num_coupling_layers=6, hidden_dim=256, 
                  num_layers=2):
 
-        super(TabularRealNVP, self).__init__()
+        super(RealNVPTabular, self).__init__()
         
         self.body = iSequential(*[
-                        TabularCouplingLayer(in_dim, hidden_dim, num_layers, MaskTabular(reverse_mask=bool(i%2)))
+                        CouplingLayerTabular(in_dim, hidden_dim, num_layers, MaskTabular(reverse_mask=bool(i%2)))
                         for i in range(num_coupling_layers)
                     ])
