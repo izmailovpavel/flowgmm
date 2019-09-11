@@ -50,19 +50,18 @@ class iCNN(FlowNetwork):
         self.num_classes = num_classes
         self.k = k
         self.body = iSequential(
-            iLogits(),
+            #iLogits(),
             RandomPadChannels(k-3),
-            *iConvBNselu(k),
-            *iConvBNselu(k),
-            *iConvBNselu(k),
+            *iCoordSelu(k),
+            *iCoordSelu(k),
+            *iCoordSelu(k),
             NNdownsample(),
-            *iConvBNselu(4*k),
-            *iConvBNselu(4*k),
-            *iConvBNselu(4*k),
+            *iCoordSelu(4*k),
+            *iCoordSelu(4*k),
+            *iCoordSelu(4*k),
             NNdownsample(),
-            *iConvBNselu(16*k),
-            *iConvBNselu(16*k),
-            *iConvBNselu(16*k),
+            *iCoordSelu(16*k),
+            *iCoordSelu(16*k),
             iConv2d(16*k,16*k),
         )
         self.classifier_head = nn.Sequential(
@@ -115,12 +114,12 @@ class MultiScaleiCNN(iCNN):
 
 @export
 class MultiScaleiCNNv2(MultiScaleiCNN):
-    def __init__(self, num_classes=10,k=64):
+    def __init__(self, num_classes=10,k=96):
         super().__init__(num_classes,k)
         self.num_classes = num_classes
         self.k = k
         self.body = iSequential(
-            iLogits(),
+            #iLogits(),
             RandomPadChannels(k-3),
             addZslot(),
 
@@ -133,15 +132,85 @@ class MultiScaleiCNNv2(MultiScaleiCNN):
             
             passThrough(*iConvSelu(2*k)),
             passThrough(*iConvSelu(2*k)),
-            passThrough(*iConvSelu(2*k)),
+            #passThrough(*iConvSelu(2*k)),
             passThrough(NNdownsample()),
             passThrough(iConv1x1(8*k)),
             keepChannels(2*k),
             
             passThrough(*iConvSelu(2*k)),
             passThrough(*iConvSelu(2*k)),
-            passThrough(*iConvSelu(2*k)),
+            #passThrough(*iConvSelu(2*k)),
             passThrough(iConv2d(2*k,2*k)),
+            Join(),
+        )
+        self.classifier_head = nn.Sequential(
+            Expression(lambda z:z[-1]),
+            nn.BatchNorm2d(2*k),
+            Expression(lambda u:u.mean(-1).mean(-1)),
+            nn.Linear(2*k,num_classes)
+        )
+        self.flow = iSequential(self.body,Flatten())
+        self.prior = StandardNormal(k*32*32)
+
+class iCNNsup(MultiScaleiCNN):
+    def __init__(self, num_classes=10,k=96):
+        super().__init__(num_classes,k)
+        self.num_classes = num_classes
+        self.k = k
+        self.body = iSequential(
+            #iLogits(),
+            RandomPadChannels(k-3),
+            addZslot(),
+
+            passThrough(*iConvSelu(k)),
+            passThrough(*iConvSelu(k)),
+            passThrough(iAvgPool2d()),
+            passThrough(iConv1x1(4*k)),
+            keepChannels(2*k),
+            
+            passThrough(*iConvSelu(2*k)),
+            passThrough(*iConvSelu(2*k)),
+            #passThrough(*iConvSelu(2*k)),
+            passThrough(iAvgPool2d()),
+            passThrough(iConv1x1(8*k)),
+            keepChannels(2*k),
+            
+            passThrough(*iConvSelu(2*k)),
+            passThrough(*iConvSelu(2*k)),
+            Join(),
+        )
+        self.classifier_head = nn.Sequential(
+            Expression(lambda z:z[-1]),
+            nn.BatchNorm2d(2*k),
+            Expression(lambda u:u.mean(-1).mean(-1)),
+            nn.Linear(2*k,num_classes)
+        )
+        self.flow = iSequential(self.body,Flatten())
+        self.prior = StandardNormal(k*32*32)
+
+class iSimpleSup(MultiScaleiCNN):
+    def __init__(self, num_classes=10,k=96):
+        super().__init__(num_classes,k)
+        self.num_classes = num_classes
+        self.k = k
+        self.body = iSequential(
+            #iLogits(),
+            RandomPadChannels(k-3),
+            addZslot(),
+
+            passThrough(*iConvSelu(k)),
+            passThrough(*iConvSelu(k)),
+            passThrough(iAvgPool2d()),
+            keepChannels(2*k),
+            
+            passThrough(*iConvSelu(2*k)),
+            passThrough(*iConvSelu(2*k)),
+            #passThrough(*iConvSelu(2*k)),
+            passThrough(iAvgPool2d()),
+            keepChannels(2*k),
+            
+            passThrough(*iConvSelu(2*k)),
+            passThrough(*iConvSelu(2*k)),
             Join(),
         )
         self.classifier_head = nn.Sequential(
