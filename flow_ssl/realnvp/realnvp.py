@@ -3,8 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from flow_ssl.realnvp.coupling_layer import CouplingLayer
+from flow_ssl.realnvp.coupling_layer import CouplingLayerTabular
 from flow_ssl.realnvp.coupling_layer import MaskCheckerboard
 from flow_ssl.realnvp.coupling_layer import MaskChannelwise
+from flow_ssl.realnvp.coupling_layer import MaskTabular
 
 from flow_ssl.invertible import iSequential
 from flow_ssl.invertible.downsample import iLogits
@@ -27,6 +29,7 @@ class RealNVPBase(nn.Module):
         return self.body.inverse(z)
 
 
+#TODO: batchnorm?
 class RealNVP(RealNVPBase):
 
     def __init__(self, num_scales=2, in_channels=3, mid_channels=64, num_blocks=8):
@@ -94,3 +97,15 @@ class RealNVPMNIST(RealNVPBase):
                 FlatJoin()
             )
 
+
+class RealNVPTabular(RealNVPBase):
+
+    def __init__(self, in_dim=2, num_coupling_layers=6, hidden_dim=256, 
+                 num_layers=2):
+
+        super(RealNVPTabular, self).__init__()
+        
+        self.body = iSequential(*[
+                        CouplingLayerTabular(in_dim, hidden_dim, num_layers, MaskTabular(reverse_mask=bool(i%2)))
+                        for i in range(num_coupling_layers)
+                    ])
