@@ -9,6 +9,7 @@ from flow_ssl.realnvp.utils import checkerboard_mask
 class MaskType(IntEnum):
     CHECKERBOARD = 0
     CHANNEL_WISE = 1
+    TABULAR = 2
 
 
 class MaskChannelwise:
@@ -46,32 +47,33 @@ class MaskCheckerboard:
         return x_id * self.b + x_change * (1 - self.b)
 
 
-class CouplingLayer(nn.Module):
-    """Coupling layer in RealNVP.
+class MaskTabular:
+    def __init__(self, reverse_mask):
+        self.type = MaskType.TABULAR
+        self.reverse_mask = reverse_mask
 
-    Args:
-        in_channels (int): Number of channels in the input.
-        mid_channels (int): Number of channels in the `s` and `t` network.
-        num_blocks (int): Number of residual blocks in the `s` and `t` network.
-        mask (MaskChannelWise or MaskChannelWise): mask.
+    def mask(self, x):
+        #PAVEL: should we pass x sizes to __init__ and only create mask once?
+        dim = x.size(1)
+        split = dim // 2
+        self.b = torch.zeros((1, dim), dtype=torch.float).to(x.device)
+        if self.reverse_mask:
+            self.b[:, split:] = 1.
+        else:
+            self.b[:, :split] = 1.
+        x_id = x * self.b
+        x_change = x * (1 - self.b)
+        return x_id, x_change
+
+    def unmask(self, x_id, x_change):
+        return x_id * self.b + x_change * (1 - self.b)
+
+
+class CouplingLayerBase(nn.Module):
+    """Coupling layer base class in RealNVP.
+    
+    must define self.mask, self.st_net, self.rescale
     """
-
-    def __init__(self, in_channels, mid_channels, num_blocks, mask):
-        super(CouplingLayer, self).__init__()
-
-        self.mask = mask
-
-        # Build scale and translate network
-        if self.mask.type == MaskType.CHANNEL_WISE:
-            in_channels //= 2
-
-        # Pavel: reuse Marc's ResNet block?
-        self.st_net = ResNet(in_channels, mid_channels, 2 * in_channels,
-                             num_blocks=num_blocks, kernel_size=3, padding=1,
-                             double_after_norm=(self.mask.type == MaskType.CHECKERBOARD))
-
-        # Learnable scale for s
-        self.rescale = nn.utils.weight_norm(Rescale(in_channels))
 
     def _get_st(self, x):
         x_id, x_change = self.mask.mask(x)
@@ -103,6 +105,34 @@ class CouplingLayer(nn.Module):
         return self._logdet
 
 
+class CouplingLayer(CouplingLayerBase):
+    """Coupling layer in RealNVP for image data.
+
+    Args:
+        in_channels (int): Number of channels in the input.
+        mid_channels (int): Number of channels in the `s` and `t` network.
+        num_blocks (int): Number of residual blocks in the `s` and `t` network.
+        mask (MaskChannelWise or MaskChannelWise): mask.
+    """
+
+    def __init__(self, in_channels, mid_channels, num_blocks, mask):
+        super(CouplingLayer, self).__init__()
+
+        self.mask = mask
+
+        # Build scale and translate network
+        if self.mask.type == MaskType.CHANNEL_WISE:
+            in_channels //= 2
+
+        # Pavel: reuse Marc's ResNet block?
+        self.st_net = ResNet(in_channels, mid_channels, 2 * in_channels,
+                             num_blocks=num_blocks, kernel_size=3, padding=1,
+                             double_after_norm=(self.mask.type == MaskType.CHECKERBOARD))
+
+        # Learnable scale for s
+        self.rescale = nn.utils.weight_norm(Rescale(in_channels))
+
+
 class Rescale(nn.Module):
     """Per-channel rescaling. Need a proper `nn.Module` so we can wrap it
     with `torch.nn.utils.weight_norm`.
@@ -113,6 +143,37 @@ class Rescale(nn.Module):
     def __init__(self, num_channels):
         super(Rescale, self).__init__()
         self.weight = nn.Parameter(torch.ones(num_channels, 1, 1))
+
+    def forward(self, x):
+        x = self.weight * x
+        return x
+
+
+class TabularCouplingLayer(CouplingLayerBase):
+
+    def __init__(self, in_dim, mid_dim, num_layers, mask):
+        
+        super(TabularCouplingLayer, self).__init__()
+        self.mask = mask
+        self.st_net = nn.Sequential(nn.Linear(in_dim, mid_dim),
+                                 nn.ReLU(),
+                                 *self._inner_seq(num_layers, mid_dim),
+                                 nn.Linear(mid_dim, in_dim*2))
+        self.rescale = nn.utils.weight_norm(TabularRescale(in_dim))
+                                 
+    @staticmethod
+    def _inner_seq(num_layers, mid_dim):
+        res = []
+        for _ in range(num_layers):
+            res.append(nn.Linear(mid_dim, mid_dim))
+            res.append(nn.ReLU())
+        return res
+
+
+class TabularRescale(nn.Module):
+    def __init__(self, D):
+        super(TabularRescale, self).__init__()
+        self.weight = nn.Parameter(torch.ones(D))
 
     def forward(self, x):
         x = self.weight * x
