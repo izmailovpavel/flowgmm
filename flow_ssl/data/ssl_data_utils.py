@@ -13,6 +13,7 @@ from PIL import Image
 import numpy as np
 from torch.utils.data.sampler import Sampler
 from flow_ssl.data.image_datasets import SVHN_
+from flow_ssl.data.nlp_datasets import AG_News
 
 
 LOG = logging.getLogger('main')
@@ -36,7 +37,7 @@ def make_ssl_data_loaders(
                 labeled_batch_size, unlabeled_batch_size, num_workers, 
                 transform_train, transform_test, use_validation, 
                 *args, **kwargs)
-    elif dataset.lower() in ["mnist", "svhn"]:
+    elif dataset.lower() in ["mnist", "svhn", "ag_news"]:
         return make_ssl_npz_data_loaders(data_path, label_path, 
                 labeled_batch_size, unlabeled_batch_size, num_workers, 
                 transform_train, transform_test, use_validation, 
@@ -59,11 +60,18 @@ def make_ssl_npz_data_loaders(
     labels = np.load(label_path)
     labeled_idxs, unlabeled_idxs = labels['labeled_indices'], labels['unlabeled_indices']
     
+    download=True
     if dataset.lower() == "svhn":
         ds = SVHN_
+    elif dataset.lower() == "ag_news":
+        #if use_validation:
+        #    raise NotImplementedError("validation not implemented for agnews")
+        ##TODO: implement validation
+        ds = AG_News
+        download=False
     else:
         ds = getattr(torchvision.datasets, dataset.upper())
-    train_set = ds(data_path, transform=transform_train, train=True, download=True)
+    train_set = ds(data_path, transform=transform_train, train=True, download=download)
     if use_validation:
         val_size = 5000
         val_idxs = unlabeled_idxs[:val_size]
@@ -80,7 +88,7 @@ def make_ssl_npz_data_loaders(
         unlabeled_idxs = idxs[:len(unlabeled_idxs)]
         labeled_idxs = idxs[len(unlabeled_idxs):]
 
-        test_set = ds(data_path, train=True, download=True, transform=transform_test)
+        test_set = ds(data_path, train=True, download=download, transform=transform_test)
         test_set.train = False
         test_set.test_data = test_set.train_data[val_idxs]
         test_set.test_labels = test_set.train_labels[val_idxs]
@@ -88,7 +96,7 @@ def make_ssl_npz_data_loaders(
         delattr(test_set, 'train_labels')
     
     else:
-        test_set = ds(data_path, train=False, download=True, transform=transform_test)
+        test_set = ds(data_path, train=False, download=download, transform=transform_test)
 
     train_set.train_labels[unlabeled_idxs] = NO_LABEL
     num_train = len(train_set.train_data)

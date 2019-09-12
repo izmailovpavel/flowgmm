@@ -64,4 +64,3 @@ class OldInterface:
 
     def __getitem__(self, i):
         return self.vision_dataset[i]
-
