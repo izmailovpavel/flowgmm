@@ -193,7 +193,8 @@ if args.swa:
 # Model
 print('Building RealNVPTabular model...')
 model_cfg = RealNVPTabular
-net = model_cfg(num_coupling_layers=5, in_dim=embed_size, num_layers=1, hidden_dim=512)
+#net = model_cfg(num_coupling_layers=5, in_dim=embed_size, num_layers=1, hidden_dim=512)
+net = model_cfg(num_coupling_layers=4, in_dim=embed_size, num_layers=1, hidden_dim=256)
 print("Model contains {} parameters".format(sum([p.numel() for p in net.parameters()])))
 
 net = net.to(device)
