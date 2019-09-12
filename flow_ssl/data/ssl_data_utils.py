@@ -64,9 +64,6 @@ def make_ssl_npz_data_loaders(
     if dataset.lower() == "svhn":
         ds = SVHN_
     elif dataset.lower() == "ag_news":
-        #if use_validation:
-        #    raise NotImplementedError("validation not implemented for agnews")
-        ##TODO: implement validation
         ds = AG_News
         download=False
     else:
