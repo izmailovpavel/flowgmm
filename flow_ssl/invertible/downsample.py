@@ -207,11 +207,13 @@ def pad_circular_nd(x: torch.Tensor, pad: int, dim) -> torch.Tensor:
 
 @export
 class iLogits(nn.Module):
-    cnstr = 0.9 # shrink the outputs to .9
+    def __init__(self,cnstr=0.90):# should change to .95
+        super().__init__()
+        self.cnstr=cnstr
     def forward(self,x):
         # assumes x values are between 0 and 1
         z = (x * 255. + torch.rand_like(x)) / 256.
-        z = (2 * z - 1) * 0.9
+        z = (2 * z - 1) * self.cnstr
         z = (z + 1) / 2
         z = z.log() - (1-z).log()
         self._z = z

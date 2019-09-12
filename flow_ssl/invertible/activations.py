@@ -60,3 +60,13 @@ class iElu(nn.ELU):
     def logdet(self):
         #logdetJ = \sum_i log J_ii # sum over c,h,w not batch
         return (-F.relu(-self._last_x)).sum(3).sum(2).sum(1) 
+
+@export
+class Swish(nn.Module):
+
+    def __init__(self):
+        super(Swish, self).__init__()
+        self.beta = nn.Parameter(torch.tensor([0.5]))
+
+    def forward(self, x):
+        return (x * torch.sigmoid_(x * F.softplus(self.beta))).div_(1.1)

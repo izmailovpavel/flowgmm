@@ -2,16 +2,14 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
-from ..utils import export
-
 
 import logging
 
 logger = logging.getLogger()
 
-#__all__ = ['iResBlock']
+__all__ = ['iResBlock']
 
-@export
+
 class iResBlock(nn.Module):
 
     def __init__(
@@ -53,14 +51,27 @@ class iResBlock(nn.Module):
         self.register_buffer('last_firmom', torch.zeros(1))
         self.register_buffer('last_secmom', torch.zeros(1))
 
+
     def forward(self,x):
-        g, self._logdet = self._logdetgrad(x)
-        return x + g
-    def logdet(self):
-        #print(self._logdet.shape)
-        return self._logdet
+        return x + self.nnet(x)
     def inverse(self,y):
-        return self._inverse_fixed_point(y)
+        x = self._inverse_fixed_point(y)
+    def logdet(self):
+        
+    def forward(self, x, logpx=None):
+        if logpx is None:
+            y = x + self.nnet(x)
+            return y
+        else:
+            g, logdetgrad = self._logdetgrad(x)
+            return x + g, logpx - logdetgrad
+
+    def inverse(self, y, logpy=None):
+        x = self._inverse_fixed_point(y)
+        if logpy is None:
+            return x
+        else:
+            return x, logpy + self._logdetgrad(x)[1]
 
     def _inverse_fixed_point(self, y, atol=1e-5, rtol=1e-5):
         x, x_prev = y - self.nnet(y), y
@@ -87,7 +98,7 @@ class iResBlock(nn.Module):
                 # Brute-force logdet only available for 2D.
                 jac = batch_jacobian(g, x)
                 batch_dets = (jac[:, 0, 0] + 1) * (jac[:, 1, 1] + 1) - jac[:, 0, 1] * jac[:, 1, 0]
-                return g, torch.log(torch.abs(batch_dets)).view(-1)
+                return g, torch.log(torch.abs(batch_dets)).view(-1, 1)
 
             if self.n_dist == 'geometric':
                 geom_p = torch.sigmoid(self.geom_p).item()
@@ -157,7 +168,7 @@ class iResBlock(nn.Module):
                 estimator = logdetgrad.detach()
                 self.last_firmom.copy_(torch.mean(estimator).to(self.last_firmom))
                 self.last_secmom.copy_(torch.mean(estimator**2).to(self.last_secmom))
-            return g, logdetgrad.view(-1)
+            return g, logdetgrad.view(-1, 1)
 
     def extra_repr(self):
         return 'dist={}, n_samples={}, n_power_series={}, neumann_grad={}, exact_trace={}, brute_force={}'.format(

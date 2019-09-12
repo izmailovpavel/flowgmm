@@ -32,13 +32,13 @@ class Flow(Trainer):
         # try: metrics['FID'],metrics['IS'] = FID_and_IS(self.as_dataloader(),self.dataloaders['dev'])
         # except KeyError: pass
         # self.logger.add_scalars('metrics', metrics, step)
-        if hasattr(self.model,'sample') and minibatch is not None:
-            with Eval(self.model):
-                self.model.nll(minibatch[0]) # Forward through network to populate shape info
-                with torch.no_grad():
-                    fake_images = self.model.sample(32).cpu().data
-            img_grid = vutils.make_grid(fake_images, normalize=False,range=(0,1))
-            self.logger.add_image('samples', img_grid, step)
+        # if hasattr(self.model,'sample') and minibatch is not None:
+        #     with Eval(self.model):
+        #         self.model.nll(minibatch[0]) # Forward through network to populate shape info
+        #         with torch.no_grad():
+        #             fake_images = self.model.sample(32).cpu().data
+        #     img_grid = vutils.make_grid(fake_images, normalize=False,range=(0,1))
+        #     self.logger.add_image('samples', img_grid, step)
         super().logStuff(step,minibatch=None)
 
     def metrics(self,loader):
@@ -97,6 +97,8 @@ from oil.datasetup.datasets import CIFAR10
 from oil.architectures.img_classifiers import layer13s
 #from invertible.iresnet import iResnet,iResnetLarge
 from flow_ssl.icnn.icnn import iCNN
+from flow_ssl.iresnet import ResidualFlow
+from oil.utils.parallel import MyDataParallel, MyDistributedDataParallel,multigpu_parallelize
 import collections
 
 
@@ -104,7 +106,7 @@ def simpleiClassifierTrial(strict=False):
     def makeTrainer(config):
         cfg = {
             'dataset': CIFAR10,'network':layer13s,'net_config': {},
-            'loader_config': {'amnt_dev':5000,'lab_BS':32, 'pin_memory':True,'num_workers':2},
+            'loader_config': {'amnt_dev':5000,'lab_BS':20, 'pin_memory':True,'num_workers':2},
             'opt_config':{'lr':.3e-4},#, 'momentum':.9, 'weight_decay':1e-4,'nesterov':True},
             'num_epochs':100,'trainer_config':{},
             }
@@ -127,26 +129,29 @@ def simpleiClassifierTrial(strict=False):
         return iClassifier(fullCNN,dataloaders,opt_constr,lr_sched,**cfg['trainer_config'])
     return train_trial(makeTrainer,strict)
 
+
+
 def simpleFlowTrial(strict=False):
     def makeTrainer(config):
         cfg = {
             'dataset': CIFAR10,'network':iCNN,'net_config':{},
-            'loader_config': {'amnt_dev':5000,'lab_BS':64, 'pin_memory':True,'num_workers':2},
+            'loader_config': {'amnt_dev':5000,'lab_BS':64, 'pin_memory':True,'num_workers':3},
             'opt_config':{'lr':.0003,},# 'momentum':.9, 'weight_decay':1e-4,'nesterov':True},
-            'num_epochs':100,'trainer_config':{},
+            'num_epochs':100,'trainer_config':{},'parallel':False,
             }
         recursively_update(cfg,config)
         trainset = cfg['dataset']('~/datasets/{}/'.format(cfg['dataset']),flow=True)
         device = torch.device('cuda')
-        fullCNN = cfg['network'](num_classes=trainset.num_classes,**cfg['net_config']).to(device)
-        
+        fullCNN = cfg['network'](num_classes=trainset.num_classes,**cfg['net_config'])
+        fullCNN.to(device)
+        if cfg['parallel']: fullCNN = multigpu_parallelize(fullCNN,cfg)
         dataloaders = {}
         dataloaders['train'], dataloaders['dev'] = getLabLoader(trainset,**cfg['loader_config'])
         dataloaders['Train'] = islice(dataloaders['train'],10000//cfg['loader_config']['lab_BS'])
         if len(dataloaders['dev'])==0:
             testset = cfg['dataset']('~/datasets/{}/'.format(cfg['dataset']),train=False,flow=True)
             dataloaders['test'] = DataLoader(testset,batch_size=cfg['loader_config']['lab_BS'],shuffle=False)
-        dataloaders = {k:LoaderTo(v,device) for k,v in dataloaders.items()}
+        dataloaders = {k:LoaderTo(v,device) for k,v in dataloaders.items()}#LoaderTo(v,device)
         opt_constr = lambda params: torch.optim.Adam(params, **cfg['opt_config'])
         lr_sched = cosLr(cfg['num_epochs'])
         return Flow(fullCNN,dataloaders,opt_constr,lr_sched,**cfg['trainer_config'])
@@ -154,4 +159,5 @@ def simpleFlowTrial(strict=False):
 
 if __name__=='__main__':
     Trial = simpleFlowTrial(strict=True)
-    Trial({'num_epochs':100,'net_config': {'sigma':.5,'k':32},})
+    Trial({'num_epochs':100,'network':ResidualFlow,'opt_config':{'lr':.0001},
+    'net_config':{'k':128,'num_per_block':8},'trainer_config':{'log_args':{'timeFrac':1/2}}})

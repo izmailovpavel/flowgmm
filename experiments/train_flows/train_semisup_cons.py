@@ -237,7 +237,7 @@ if args.swa:
 print('Building {} model...'.format(args.flow))
 model_cfg = getattr(flow_ssl, args.flow)
 net = model_cfg(in_channels=img_shape[0])
-if args.flow in ["iCNN3d", "iResnetProper"]:
+if args.flow in ["iCNN3d", "iResnetProper","SmallResidualFlow","ResidualFlow"]:
     net = net.flow
 print("Model contains {} parameters".format(sum([p.numel() for p in net.parameters()])))
 

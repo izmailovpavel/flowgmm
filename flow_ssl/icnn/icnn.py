@@ -22,14 +22,14 @@ def iCoordSelu(channels):
 def iConvBNselu(channels):
     return iSequential(iConv2d(channels,channels),iBN(channels),iSLReLU())#iSLReLU())
 
-def StandardNormal(d):
-    return Independent(Normal(torch.zeros(d).cuda(),torch.ones(d).cuda()),1)
+def StandardNormal(d,device=torch.device('cuda:0')):
+    return Independent(Normal(torch.zeros(d).to(device),torch.ones(d).to(device)),1)
 
 class FlowNetwork(nn.Module,metaclass=Named):
     def forward(self,x):
         return self.classifier_head(self.body(x))
     def sample(self,bs=1):
-        return self.flow.inverse(self.prior.sample([bs]).to(self.device))
+        return self.flow.inverse(self.prior(self.device).sample([bs]))
     @property
     def device(self):
         try: return self._device
@@ -39,7 +39,7 @@ class FlowNetwork(nn.Module,metaclass=Named):
     def nll(self,x):
         z = self.flow(x)
         logdet = self.flow.logdet()
-        return  -1*(self.prior.log_prob(z) + logdet)
+        return  -1*(self.prior(x.device).log_prob(z) + logdet)
 @export
 class iCNN(FlowNetwork):
     """
