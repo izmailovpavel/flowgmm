@@ -298,7 +298,7 @@ class LopLinear(nn.Linear):
         domain=float('inf'),
         codomain=float('inf'),
         local_constraint=True,
-        **unused_kwargs,
+        **unused_kwargs
     ):
         del unused_kwargs
         super(LopLinear, self).__init__(in_features, out_features, bias)
@@ -347,7 +347,7 @@ class LopConv2d(nn.Conv2d):
         domain=float('inf'),
         codomain=float('inf'),
         local_constraint=True,
-        **unused_kwargs,
+        **unused_kwargs
     ):
         del unused_kwargs
         super(LopConv2d, self).__init__(in_channels, out_channels, kernel_size, stride, padding, bias)
@@ -393,7 +393,7 @@ class LipNormLinear(nn.Linear):
         domain=float('inf'),
         codomain=float('inf'),
         local_constraint=True,
-        **unused_kwargs,
+        **unused_kwargs
     ):
         del unused_kwargs
         super(LipNormLinear, self).__init__(in_features, out_features, bias)
@@ -441,7 +441,7 @@ class LipNormConv2d(nn.Conv2d):
         domain=float('inf'),
         codomain=float('inf'),
         local_constraint=True,
-        **unused_kwargs,
+        **unused_kwargs
     ):
         del unused_kwargs
         super(LipNormConv2d, self).__init__(in_channels, out_channels, kernel_size, stride, padding, bias)

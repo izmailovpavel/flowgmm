@@ -3,6 +3,7 @@ import numpy as np
 from tqdm import tqdm
 from .shell_util import AverageMeter
 from .optim_util import bits_per_dim
+import torchvision
 
 
 def wilson_schedule(lr_init, epoch, num_epochs):
@@ -80,14 +81,18 @@ def sample(net, prior, batch_size, cls, device, sample_shape):
         return x
 
 
-def test_classifier(epoch, net, testloader, device, loss_fn, writer=None, postfix=""):
+def test_classifier(epoch, net, testloader, device, loss_fn, writer=None, postfix="",
+                    show_classification_images=False):
     net.eval()
     loss_meter = AverageMeter()
     jaclogdet_meter = AverageMeter()
     acc_meter = AverageMeter()
+    all_pred_labels = []
+    all_xs = []
     with torch.no_grad():
         with tqdm(total=len(testloader.dataset)) as progress_bar:
             for x, y in testloader:
+                all_xs.append(x.data.numpy())
                 x = x.to(device)
                 y = y.to(device)
                 z = net(x)
@@ -98,6 +103,7 @@ def test_classifier(epoch, net, testloader, device, loss_fn, writer=None, postfi
 
                 preds = loss_fn.prior.classify(z.reshape((len(z), -1)))
                 preds = preds.reshape(y.shape)
+                all_pred_labels.append(preds.cpu().data.numpy())
                 acc = (preds == y).float().mean().item()
                 acc_meter.update(acc, x.size(0))
 
@@ -105,8 +111,25 @@ def test_classifier(epoch, net, testloader, device, loss_fn, writer=None, postfi
                                      bpd=bits_per_dim(x, loss_meter.avg),
                                      acc=acc_meter.avg)
                 progress_bar.update(x.size(0))
+    all_pred_labels = np.hstack(all_pred_labels)
+    all_xs = np.vstack(all_xs)
+    
     if writer is not None:
         writer.add_scalar("test/loss{}".format(postfix), loss_meter.avg, epoch)
         writer.add_scalar("test/acc{}".format(postfix), acc_meter.avg, epoch)
         writer.add_scalar("test/bpd{}".format(postfix), bits_per_dim(x, loss_meter.avg), epoch)
         writer.add_scalar("test/jaclogdet{}".format(postfix), jaclogdet_meter.avg, epoch)
+
+        for cls in range(np.max(all_pred_labels)):
+            num_imgs_cls = (all_pred_labels==cls).sum()
+            writer.add_scalar("test_clustering/num_class_{}_{}".format(cls,postfix), 
+                    num_imgs_cls, epoch)
+            if num_imgs_cls == 0:
+                continue
+            if show_classification_images:
+                images_cls = all_xs[all_pred_labels==cls][:10]
+                images_cls = torch.from_numpy(images_cls).float()
+                images_cls_concat = torchvision.utils.make_grid(
+                        images_cls, nrow=2, padding=2, pad_value=255)
+                writer.add_image("test_clustering/class_{}".format(cls), 
+                        images_cls_concat)

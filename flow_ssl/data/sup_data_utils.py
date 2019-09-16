@@ -1,6 +1,7 @@
 import torch
 import torchvision
 import os
+from flow_ssl.data.nlp_datasets import AG_News
 from flow_ssl.data.image_datasets import SVHN_
 from flow_ssl.data.image_datasets import OldInterface
 
@@ -29,17 +30,21 @@ def make_sup_data_loaders(
                 )
         return None, test_loader, 10
 
+    download=True
     if dataset.lower() == "svhn":
         ds = SVHN_
+    elif dataset.lower() == "ag_news":
+        ds = AG_News
+        download=False
     else:
         ds = getattr(torchvision.datasets, dataset.upper())
 
-    train_set = ds(root=path, train=True, download=True, transform=transform_train)
+    train_set = ds(root=path, train=True, download=download, transform=transform_train)
 
     if not ((hasattr(train_set, "train_data") or hasattr(train_set, "test_data"))):
         ds_base = ds
         ds = lambda *args, **kwargs: OldInterface(ds_base(*args, **kwargs))
-        train_set = ds(root=path, train=True, download=True, transform=transform_train)
+        train_set = ds(root=path, train=True, download=download, transform=transform_train)
 
     num_classes = max(train_set.train_labels) + 1
 
@@ -49,14 +54,14 @@ def make_sup_data_loaders(
         train_set.train_data = train_set.train_data[:-val_size]
         train_set.train_labels = train_set.train_labels[:-val_size]
 
-        test_set = ds(root=path, train=True, download=True, transform=transform_test)
+        test_set = ds(root=path, train=True, download=download, transform=transform_test)
         test_set.train = False
         test_set.test_data = test_set.train_data[-val_size:]
         test_set.test_labels = test_set.train_labels[-val_size:]
         delattr(test_set, 'train_data')
         delattr(test_set, 'train_labels')
     else:
-        test_set = ds(root=path, train=False, download=True, transform=transform_test)
+        test_set = ds(root=path, train=False, download=download, transform=transform_test)
 
     train_loader = torch.utils.data.DataLoader(
                 train_set,
