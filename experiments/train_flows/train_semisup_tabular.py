@@ -23,6 +23,7 @@ from flow_ssl.realnvp import RealNVPTabular
 from flow_ssl import FlowLoss
 from flow_ssl.distributions import SSLGaussMixture
 from flow_ssl.data import make_ssl_data_loaders
+from flow_ssl.data import make_sup_data_loaders
 from flow_ssl.data import NO_LABEL
 
 
@@ -158,18 +159,14 @@ start_epoch = 0
 
 # Note: No normalization applied, since RealNVP expects inputs in (0, 1).
 
-transform_train = None
-
-transform_test = None
-
 trainloader, testloader, _ = make_ssl_data_loaders(
         args.data_path, 
         args.label_path, 
         args.batch_size // 2, 
         args.batch_size // 2, 
         args.num_workers, 
-        transform_train, 
-        transform_test, 
+        None, 
+        None, 
         use_validation=args.use_validation,
         dataset=args.dataset.lower())
 
@@ -178,13 +175,13 @@ if args.dataset.lower() == "ag_news":
     n_class = 4
 
 if args.swa:
-    raise NotImplementedError("SWA not yet supported")
+    #raise NotImplementedError("SWA not yet supported")
     bn_loader, _, _ = make_sup_data_loaders(
             args.data_path, 
             args.batch_size, 
             args.num_workers, 
-            transform_train.transform, 
-            transform_test, 
+            None, 
+            None, 
             use_validation=args.use_validation,
             shuffle_train=True,
             dataset=args.dataset.lower())
@@ -193,8 +190,14 @@ if args.swa:
 # Model
 print('Building RealNVPTabular model...')
 model_cfg = RealNVPTabular
+net = model_cfg(num_coupling_layers=10, in_dim=embed_size, num_layers=1, hidden_dim=512)
+#net = model_cfg(num_coupling_layers=10, in_dim=embed_size, num_layers=1, hidden_dim=256)
+#net = model_cfg(num_coupling_layers=7, in_dim=embed_size, num_layers=1, hidden_dim=256)
+#net = model_cfg(num_coupling_layers=5, in_dim=embed_size, num_layers=1, hidden_dim=768)
 #net = model_cfg(num_coupling_layers=5, in_dim=embed_size, num_layers=1, hidden_dim=512)
-net = model_cfg(num_coupling_layers=4, in_dim=embed_size, num_layers=1, hidden_dim=256)
+#net = model_cfg(num_coupling_layers=5, in_dim=embed_size, num_layers=1, hidden_dim=256)
+#net = model_cfg(num_coupling_layers=4, in_dim=embed_size, num_layers=1, hidden_dim=256)
+#net = model_cfg(num_coupling_layers=4, in_dim=embed_size, num_layers=1, hidden_dim=128)
 print("Model contains {} parameters".format(sum([p.numel() for p in net.parameters()])))
 
 net = net.to(device)
