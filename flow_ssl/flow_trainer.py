@@ -99,6 +99,7 @@ from oil.architectures.img_classifiers import layer13s
 from flow_ssl.icnn.icnn import iCNN
 from flow_ssl.iresnet import ResidualFlow
 from oil.utils.parallel import MyDataParallel, MyDistributedDataParallel,multigpu_parallelize
+import torchvision.transforms as transforms
 import collections
 
 
@@ -130,20 +131,19 @@ def simpleiClassifierTrial(strict=False):
     return train_trial(makeTrainer,strict)
 
 
-
 def simpleFlowTrial(strict=False):
     def makeTrainer(config):
         cfg = {
             'dataset': CIFAR10,'network':iCNN,'net_config':{},
-            'loader_config': {'amnt_dev':5000,'lab_BS':64, 'pin_memory':True,'num_workers':3},
+            'loader_config': {'amnt_dev':5000,'lab_BS':32, 'pin_memory':True,'num_workers':3},
             'opt_config':{'lr':.0003,},# 'momentum':.9, 'weight_decay':1e-4,'nesterov':True},
             'num_epochs':100,'trainer_config':{},'parallel':False,
             }
         recursively_update(cfg,config)
-        trainset = cfg['dataset']('~/datasets/{}/'.format(cfg['dataset']),flow=True)
+        train_transforms = transforms.Compose([transforms.ToTensor(),transforms.RandomHorizontalFlip()])
+        trainset = cfg['dataset']('~/datasets/{}/'.format(cfg['dataset']),flow=True,)
         device = torch.device('cuda')
-        fullCNN = cfg['network'](num_classes=trainset.num_classes,**cfg['net_config'])
-        fullCNN.to(device)
+        fullCNN = cfg['network'](num_classes=trainset.num_classes,**cfg['net_config']).to(device)
         if cfg['parallel']: fullCNN = multigpu_parallelize(fullCNN,cfg)
         dataloaders = {}
         dataloaders['train'], dataloaders['dev'] = getLabLoader(trainset,**cfg['loader_config'])
@@ -160,4 +160,4 @@ def simpleFlowTrial(strict=False):
 if __name__=='__main__':
     Trial = simpleFlowTrial(strict=True)
     Trial({'num_epochs':100,'network':ResidualFlow,'opt_config':{'lr':.0001},
-    'net_config':{'k':128,'num_per_block':8},'trainer_config':{'log_args':{'timeFrac':1/2}}})
+    'net_config':{'k':512,'num_per_block':12},'trainer_config':{'log_args':{'timeFrac':1/2}}})

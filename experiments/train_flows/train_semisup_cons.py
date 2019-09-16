@@ -26,7 +26,7 @@ from flow_ssl.data import make_ssl_data_loaders
 from flow_ssl.data import make_sup_data_loaders
 from flow_ssl.data import NO_LABEL
 from flow_ssl.data import TransformTwice
-
+torch.autograd.set_detect_anomaly(True)
 
 #PAVEL: move to utils later
 def linear_rampup(final_value, epoch, num_epochs, start_epoch=0):
