@@ -221,6 +221,11 @@ trainloader, testloader, _ = make_ssl_data_loaders(
         use_validation=args.use_validation,
         dataset=args.dataset.lower())
 
+n_class = 10
+labels = trainloader.dataset.train_labels
+for cls in range(n_class):
+    print("Class {}: {} data".format(cls, (labels==cls).sum()))
+
 if args.swa:
     bn_loader, _, _ = make_sup_data_loaders(
             args.data_path, 
