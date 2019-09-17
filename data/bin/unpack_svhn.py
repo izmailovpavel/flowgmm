@@ -29,7 +29,8 @@ for per_class in [25, 50, 100]:
         mask = np.zeros(indices.shape[0], dtype=np.bool)
         labels = train_set.labels
         for j in range(10):
-            mask[np.where(labels == j)[0][:per_class]] = True
-            np.savez(os.path.join(label_dir, str(i)),
-                     labeled_indices=indices[mask],
-                     unlabeled_indices=indices[~mask])
+            mask[np.where(labels[indices] == j)[0][:per_class]] = True
+
+        np.savez(os.path.join(label_dir, str(i)),
+                 labeled_indices=indices[mask],
+                 unlabeled_indices=indices[~mask])

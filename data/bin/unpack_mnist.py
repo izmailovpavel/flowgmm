@@ -16,7 +16,7 @@ print("MNIST: label_dir", base_label_dir)
 print("MNIST: img_dir", img_dir)
 
 #10 images per class
-for per_class in [10, 100]:
+for per_class in [10, 60, 100, 300]:
     label_dir = os.path.join(base_label_dir, str(10 * per_class)+"_balanced_labels")
     os.makedirs(label_dir, exist_ok=True)
     

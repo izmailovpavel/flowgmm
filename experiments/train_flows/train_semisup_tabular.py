@@ -174,6 +174,10 @@ if args.dataset.lower() == "ag_news":
     embed_size = 768
     n_class = 4
 
+labels = trainloader.dataset.train_labels
+for cls in range(n_class):
+    print("Class {}: {} data".format(cls, (labels==cls).sum()))
+
 if args.swa:
     #raise NotImplementedError("SWA not yet supported")
     bn_loader, _, _ = make_sup_data_loaders(
