@@ -16,6 +16,7 @@ from flow_ssl.invertible.parts import addZslot
 from flow_ssl.invertible.parts import FlatJoin
 from flow_ssl.invertible.parts import passThrough
 from flow_ssl.invertible.coupling_layers import iConv1x1
+from flow_ssl.invertible import Swish, ActNorm1d, ActNorm2d
 
 class RealNVPBase(nn.Module):
 
@@ -78,6 +79,25 @@ class RealNVPw1x1(RealNVP):
                 CouplingLayer(in_channels, mid_channels, num_blocks, mask_class(reverse_mask=False))
         ]
         return layers
+
+
+
+class RealNVPw1x1ActNorm(RealNVP):
+    @staticmethod
+    def _threecouplinglayers(in_channels, mid_channels, num_blocks, mask_class):
+        layers = [
+                ActNorm2d(in_channels),
+                iConv1x1(in_channels),
+                CouplingLayer(in_channels, mid_channels, num_blocks, mask_class(reverse_mask=False)),
+                ActNorm2d(in_channels),
+                iConv1x1(in_channels),
+                CouplingLayer(in_channels, mid_channels, num_blocks, mask_class(reverse_mask=True)),
+                ActNorm2d(in_channels),
+                iConv1x1(in_channels),
+                CouplingLayer(in_channels, mid_channels, num_blocks, mask_class(reverse_mask=False))
+        ]
+        return layers
+
 
 class RealNVPMNIST(RealNVPBase):
     def __init__(self, in_channels=1, mid_channels=64, num_blocks=4):
