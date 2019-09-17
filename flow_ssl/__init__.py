@@ -1,7 +1,6 @@
 from flow_ssl.flow_loss import FlowLoss
-from flow_ssl.realnvp import RealNVP
+from flow_ssl.realnvp import RealNVP,RealNVPw1x1
 from flow_ssl.realnvp import RealNVPMNIST
-from flow_ssl.realnvp import RealNVPTabular
 from flow_ssl.iresnet import ResidualFlow
 from flow_ssl.realnvp import RealNVPTabular
 from flow_ssl.iresnet import ResidualFlow, SmallResidualFlow

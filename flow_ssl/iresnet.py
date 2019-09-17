@@ -37,20 +37,21 @@ def iResBlockLinear(outer_channels,inner_channels):
 
 @export
 def SmallResidualFlow(in_channels):
-    return ResidualFlow(in_channels,k=128,num_per_block=8)
+    return ResidualFlow(in_channels,k=96,num_per_block=8)
 
 @export
 class ResidualFlow(FlowNetwork):
-    def __init__(self, in_channels=3, num_classes=10, k=512,num_per_block=15):
+    def __init__(self, in_channels=3, num_classes=10, k=512,num_per_block=16):
         super().__init__()
         self.num_classes = num_classes
         self.flow = iSequential(
-            iLogits(),
-            *[iResBlockConv(in_channels,k) for i in range(num_per_block)],
+            #iLogits(),
             SqueezeLayer(),
             *[iResBlockConv(in_channels*4,k) for i in range(num_per_block)],
             SqueezeLayer(),
             *[iResBlockConv(in_channels*16,k) for i in range(num_per_block)],
+            SqueezeLayer(),
+            *[iResBlockConv(in_channels*64,k) for i in range(num_per_block)],
             Flatten(),
             *[iResBlockLinear(3*32*32,k//4) for i in range(4)],
         )
@@ -60,7 +61,8 @@ class ResidualFlow(FlowNetwork):
     def nll(self,x):
         x.requires_grad = True
         return super().nll(x)
-
+    def forward(self,x):
+        return self.nll(x)
 # class iResBlock(nn.Module):
 #     def __init__(self,in_channels,out_channels,ksize=3,drop_rate=0,stride=1,
 #                     inverse_tol=1e-7,sigma=1.,**kwargs):
