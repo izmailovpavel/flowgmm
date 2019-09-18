@@ -54,7 +54,8 @@ def make_ssl_npz_data_loaders(
     transform_train, 
     transform_test, 
     use_validation=True, 
-    dataset="mnist"
+    dataset="mnist",
+    return_all_labels=False,
     ):
 
     labels = np.load(label_path)
@@ -95,7 +96,12 @@ def make_ssl_npz_data_loaders(
     else:
         test_set = ds(data_path, train=False, download=download, transform=transform_test)
 
-    train_set.train_labels[unlabeled_idxs] = NO_LABEL
+    if return_all_labels:
+        train_set.train_labels = np.hstack([train_set.train_labels[:, None],
+                                        train_set.train_labels[:, None]])
+        train_set.train_labels[unlabeled_idxs, 0] = NO_LABEL
+    else:
+        train_set.train_labels[unlabeled_idxs] = NO_LABEL
     num_train = len(train_set.train_data)
     num_classes = 10
 

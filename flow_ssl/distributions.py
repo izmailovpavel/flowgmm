@@ -8,14 +8,14 @@ class SSLGaussMixture(torch.distributions.Distribution):
 
     def __init__(self, means, inv_cov_stds=None, device=None):
         self.n_components, self.d = means.shape
-        self.means = means.to(device)
+        self.means = means
 
         if inv_cov_stds is None:
-            self.inv_cov_stds = math.log(math.exp(1.0) - 1.0) * torch.ones((len(means))).to(device)
+            self.inv_cov_stds = math.log(math.exp(1.0) - 1.0) * torch.ones((len(means)), device=device)
         else:
             self.inv_cov_stds = inv_cov_stds.to(device)
 
-        self.weights = torch.ones((len(means))).to(device)
+        self.weights = torch.ones((len(means)), device=device)
         self.device = device
 
     @property
