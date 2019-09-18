@@ -140,11 +140,13 @@ def test_classifier(epoch, net, testloader, device, loss_fn, writer=None, postfi
         writer.add_scalar("test/bpd{}".format(postfix), bits_per_dim(x, loss_meter.avg), epoch)
         writer.add_scalar("test/jaclogdet{}".format(postfix), jaclogdet_meter.avg, epoch)
 
-        for cls in range(np.max(all_pred_labels)):
+        for cls in range(np.max(all_pred_labels)+1):
             num_imgs_cls = (all_pred_labels==cls).sum()
             writer.add_scalar("test_clustering/num_class_{}_{}".format(cls,postfix), 
                     num_imgs_cls, epoch)
             if num_imgs_cls == 0:
+                writer.add_scalar("test_clustering/num_class_{}_{}".format(cls,postfix), 
+                    0., epoch)
                 continue
             if show_classification_images:
                 images_cls = all_xs[all_pred_labels==cls][:10]
