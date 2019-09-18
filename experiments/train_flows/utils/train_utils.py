@@ -35,6 +35,26 @@ def get_class_means(net, trainloader, shape):
         means /= 5000
         return means
 
+
+def get_class_means_unlabeled(trainloader, shape, scale=500):
+    with torch.no_grad():
+        means = torch.zeros(shape)
+        with tqdm(total=len(trainloader.dataset)) as progress_bar:
+            for (x, x2), y_ in trainloader:
+                if len(y_.shape) == 2:
+                    y, _ = y_[:, 0], y_[:, 1]
+                else:
+                    y = y_
+
+                for i in range(10):
+                    means[i] += x[y == i].sum(dim=0).cpu()
+
+        for i in range(10):
+            means[i] /= sum(trainloader.dataset.train_labels[:, 0] == i)
+
+        return means*scale
+
+
 def get_means(means_type, num_means=10, shape=(3, 32, 32), r=1, trainloader=None, device=None):
 
     D = np.prod(shape)
@@ -42,9 +62,9 @@ def get_means(means_type, num_means=10, shape=(3, 32, 32), r=1, trainloader=None
 
     if means_type == "from_data":
         print("Computing the means")
-        means = get_class_means(net, trainloader)
+        means = get_class_means_unlabeled(trainloader, (num_means, *shape))
         means = means.reshape((10, -1)).to(device)
-    
+
     elif means_type == "pixel_const":
         for i in range(num_means):
             means[i, :] = r * (i-4)

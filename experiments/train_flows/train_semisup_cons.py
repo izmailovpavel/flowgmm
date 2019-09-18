@@ -37,9 +37,9 @@ def linear_rampup(final_value, epoch, num_epochs, start_epoch=0):
 
 
 #PAVEL: think of a good way to reuse the training code for (semi/un/)supervised
-def train(epoch, net, trainloader, device, optimizer, loss_fn, 
+def train(epoch, net, trainloader, device, optimizer, opt_gmm, loss_fn,
           label_weight, max_grad_norm, consistency_weight,
-          writer, use_unlab=True, 
+          writer, use_unlab=True,  acc_train_all_labels=False,
           ):
     print('\nEpoch: %d' % epoch)
     net.train()
@@ -49,15 +49,22 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn,
     loss_consistency_meter = utils.AverageMeter()
     jaclogdet_meter = utils.AverageMeter()
     acc_meter = utils.AverageMeter()
+    acc_all_meter = utils.AverageMeter()
     with tqdm(total=trainloader.batch_sampler.num_labeled) as progress_bar:
         for (x1, x2), y in trainloader:
 
             x1 = x1.to(device)
-            y = y.to(device)
+            if not acc_train_all_labels:
+                y = y.to(device)
+            else:
+                y, y_all_lab = y[:, 0], y[:, 1]
+                y = y.to(device)
+                y_all_lab = y_all_lab.to(device)
 
             labeled_mask = (y != NO_LABEL)
 
             optimizer.zero_grad()
+            opt_gmm.zero_grad()
 
             with torch.no_grad():
                 x2 = x2.to(device)
@@ -68,11 +75,12 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn,
             z1 = net(x1)
             sldj = net.module.logdet()
 
-            z_labeled = z1.reshape((len(z1), -1))
-            z_labeled = z_labeled[labeled_mask]
+            z_all = z1.reshape((len(z1), -1))
+            z_labeled = z_all[labeled_mask]
             y_labeled = y[labeled_mask]
 
-            logits_labeled = loss_fn.prior.class_logits(z_labeled)
+            logits_all = loss_fn.prior.class_logits(z_all)
+            logits_labeled = logits_all[labeled_mask]
             loss_nll = F.cross_entropy(logits_labeled, y_labeled)
 
             if use_unlab:
@@ -89,11 +97,18 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn,
             loss.backward()
             utils.clip_grad_norm(optimizer, max_grad_norm)
             optimizer.step()
+            opt_gmm.step()
 
-            preds = torch.argmax(logits_labeled, dim=1)
+            preds_all = torch.argmax(logits_all, dim=1)
+            preds = preds_all[labeled_mask]
             acc = (preds == y_labeled).float().mean().item()
+            if acc_train_all_labels:
+                acc_all = (preds_all == y_all_lab).float().mean().item()
+            else:
+                acc_all = acc
 
             acc_meter.update(acc, x1.size(0))
+            acc_all_meter.update(acc_all, x1.size(0))
             loss_meter.update(loss.item(), x1.size(0))
             loss_unsup_meter.update(loss_unsup.item(), x1.size(0))
             loss_nll_meter.update(loss_nll.item(), x1.size(0))
@@ -102,7 +117,8 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn,
 
             progress_bar.set_postfix(loss=loss_meter.avg,
                                      bpd=utils.bits_per_dim(x1, loss_unsup_meter.avg),
-                                     acc=acc_meter.avg)
+                                     acc=acc_meter.avg,
+                                     acc_all=acc_all_meter.avg)
             progress_bar.update(y_labeled.size(0))
 
     x1_img = torchvision.utils.make_grid(x1[:10], nrow=2 , padding=2, pad_value=255)
@@ -115,6 +131,7 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn,
     writer.add_scalar("train/loss_nll", loss_nll_meter.avg, epoch)
     writer.add_scalar("train/jaclogdet", jaclogdet_meter.avg, epoch)
     writer.add_scalar("train/acc", acc_meter.avg, epoch)
+    writer.add_scalar("train/acc_all", acc_all_meter.avg, epoch)
     writer.add_scalar("train/bpd", utils.bits_per_dim(x1, loss_unsup_meter.avg), epoch)
     writer.add_scalar("train/loss_consistency", loss_consistency_meter.avg, epoch)
 
@@ -157,7 +174,6 @@ parser.add_argument('--cov_std', default=1., type=float,
                     help='covariance std for the latent distribution')
 parser.add_argument('--save_freq', default=25, type=int, 
                     help='frequency of saving ckpts')
-parser.add_argument('--means_trainable', action='store_true', help='Use trainable means')
 parser.add_argument('--optimizer', choices=['SGD', 'Adam'], default='Adam')
 parser.add_argument('--schedule', choices=['wilson', 'no'], default='no')
 parser.add_argument('--label_weight', default=1., type=float,
@@ -172,6 +188,18 @@ parser.add_argument('--swa', action='store_true', help='SWA (default: off)')
 parser.add_argument('--swa_start', type=float, default=0, metavar='N', help='Steps before SWA start (default: 0)')
 parser.add_argument('--swa_freq', type=float, default=10, metavar='N', help='SWA upd freq (default: 10)')
 parser.add_argument('--swa_lr', type=float, default=0.001, metavar='LR', help='SWA LR (default: 0.001)')
+
+parser.add_argument('--acc_train_all_labels', action='store_true')
+
+parser.add_argument('--gmm_trainable', action='store_true')
+parser.add_argument('--means_trainable', action='store_true')
+parser.add_argument('--weights_trainable', action='store_true')
+parser.add_argument('--covs_trainable', action='store_true')
+parser.add_argument('--lr_gmm', default=1e-2, type=float)
+# parser.add_argument('--means_reg', action='store_true')
+# parser.add_argument('--joint', action='store_true')
+# parser.add_argument('--flow_iters', default=300, type=int)
+# parser.add_argument('--gmm_iters', default=100, type=int)
 
 
 args = parser.parse_args()
@@ -219,7 +247,8 @@ trainloader, testloader, _ = make_ssl_data_loaders(
         transform_train, 
         transform_test, 
         use_validation=args.use_validation,
-        dataset=args.dataset.lower())
+        dataset=args.dataset.lower(),
+        return_all_labels=args.acc_train_all_labels,)
 
 if args.dataset.lower() != "cifar10":
     n_class = 10
@@ -269,31 +298,39 @@ if args.resume is not None:
     print("Using the means for ckpt")
     means = checkpoint['means']
 
-
 print("Means:", means)
 print("Cov std:", cov_std)
 means_np = means.cpu().numpy()
 print("Pairwise dists:", cdist(means_np, means_np))
 
+if args.gmm_trainable:
+    args.means_trainable = True
+    args.covs_trainable = True
+    args.weights_trainable = True
+
 if args.means_trainable:
     print("Using learnable means")
-    means = torch.tensor(means_np, requires_grad=True)
+    means = torch.tensor(means_np, requires_grad=True, device=device)
 
 mean_imgs = torchvision.utils.make_grid(
         means.reshape((10, *img_shape)), nrow=5)
 writer.add_image("means", mean_imgs)
 prior = SSLGaussMixture(means, device=device)
+prior.weights.requires_grad = args.weights_trainable
+prior.inv_cov_stds.requires_grad = args.covs_trainable
 loss_fn = FlowLoss(prior)
 
 #PAVEL: check why do we need this
 param_groups = utils.get_param_groups(net, args.weight_decay, norm_suffix='weight_g')
-if args.means_trainable:
-    param_groups.append({'name': 'means', 'params': means})
 
 if args.optimizer == "SGD":
     optimizer = optim.SGD(param_groups, lr=args.lr)
+    opt_gmm = optim.SGD([prior.means, prior.weights, prior.inv_cov_stds],
+                               lr=args.lr_gmm, weight_decay=0.)
 elif args.optimizer == "Adam":
     optimizer = optim.Adam(param_groups, lr=args.lr)
+    opt_gmm = optim.Adam([prior.means, prior.weights, prior.inv_cov_stds],
+                               lr=args.lr_gmm, weight_decay=0.)
 else:
     raise ValueError("Unknown optimizer {}".format(args.optimizer))
 
@@ -307,18 +344,23 @@ for epoch in range(start_epoch, args.num_epochs):
 
     if args.schedule == 'wilson':
         lr = utils.wilson_schedule(args.lr, epoch, args.num_epochs)
-        utils.adjust_learning_rate(optimizer, lr)	
+        utils.adjust_learning_rate(optimizer, lr)
+        lr_gmm = utils.wilson_schedule(args.lr_gmm, epoch, args.num_epochs)
+        utils.adjust_learning_rate(opt_gmm, lr_gmm)
     else:
         lr = args.lr
-    
+        lr_gmm = args.lr_gmm
+
     cons_weight = linear_rampup(args.consistency_weight, epoch, args.consistency_rampup, start_epoch)
     
     writer.add_scalar("hypers/learning_rate", lr, epoch)
+    writer.add_scalar("hypers/learning_rate_gmm", lr_gmm, epoch)
     writer.add_scalar("hypers/consistency_weight", cons_weight, epoch)
 
-    train(epoch, net, trainloader, device, optimizer, loss_fn, 
+    train(epoch, net, trainloader, device, optimizer, opt_gmm, loss_fn,
           args.label_weight, args.max_grad_norm, cons_weight,
           writer, use_unlab=not args.supervised_only, 
+          acc_train_all_labels=args.acc_train_all_labels,
          )
 
     # Save checkpoint
@@ -327,7 +369,7 @@ for epoch in range(start_epoch, args.num_epochs):
         state = {
             'net': net.state_dict(),
             'epoch': epoch,
-            'means': means
+            'means': prior.means,
         }
         os.makedirs(args.ckptdir, exist_ok=True)
         torch.save(state, os.path.join(args.ckptdir, str(epoch)+'.pt'))
@@ -343,8 +385,11 @@ for epoch in range(start_epoch, args.num_epochs):
                     writer, postfix="_swa")
 
         mean_imgs = torchvision.utils.make_grid(
-                means.reshape((10, *img_shape)), nrow=5)
+                prior.means.reshape((10, *img_shape)), nrow=5)
         writer.add_image("means", mean_imgs)
+        for i in range(10):
+            writer.add_scalar("train/gaussian_weight/{}".format(i), prior.weights[i], epoch)
+
         images = []
         for i in range(10):
             images_cls = utils.sample(net, loss_fn.prior, args.num_samples // 10,
