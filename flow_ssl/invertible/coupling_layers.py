@@ -140,6 +140,27 @@ class iSimpleCoords(nn.Module):
     def logdet(self):
         return self._log_mul.sum(3).sum(2).sum(1)
 
+import torchcontrib
+import torchcontrib.nn.functional as contrib
+
+@export
+class iCategoricalFiLM(nn.Module):
+    def __init__(self,num_classes,channels):
+        super().__init__()
+        self.gammas = nn.Embedding(num_classes,channels)
+        self.betas = nn.Embedding(num_classes,channels)
+    def forward(self,xy):
+        x,y = xy
+        return (contrib.film(x,self.gammas(y),self.betas(y)),y)
+    def inverse(self,xy):
+        x,y = xy
+        gammas = self.gammas(y)
+        return (contrib.film(x,1/gammas,-self.betas(y)/gammas),y)
+    def logdet(self,xy):
+        x,y = xy
+        h,w = x.shape[2:]
+        return torch.log(self.gammas(y)).sum(1)*h*w
+
 
 def fft_conv3x3(x,weight):
     bs,c,h,w = x.shape
