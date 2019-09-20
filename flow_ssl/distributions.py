@@ -13,7 +13,7 @@ class SSLGaussMixture(torch.distributions.Distribution):
         if inv_cov_stds is None:
             self.inv_cov_stds = math.log(math.exp(1.0) - 1.0) * torch.ones((len(means)), device=device)
         else:
-            self.inv_cov_stds = inv_cov_stds.to(device)
+            self.inv_cov_stds = inv_cov_stds
 
         self.weights = torch.ones((len(means)), device=device)
         self.device = device
@@ -50,6 +50,7 @@ class SSLGaussMixture(torch.distributions.Distribution):
             mask = (y == -1)
             log_probs[mask] += mixture_log_probs[mask]
             for i in range(self.n_components):
+                #Pavel: add class weights here? 
                 mask = (y == i)
                 log_probs[mask] += all_log_probs[:, i][mask] * label_weight
             return log_probs

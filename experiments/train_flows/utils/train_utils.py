@@ -4,6 +4,7 @@ from tqdm import tqdm
 from .shell_util import AverageMeter
 from .optim_util import bits_per_dim
 import torchvision
+from flow_ssl.data import NO_LABEL
 
 
 def wilson_schedule(lr_init, epoch, num_epochs):
@@ -32,7 +33,24 @@ def get_class_means(net, trainloader, shape):
                 progress_bar.set_postfix(max_mean=torch.max(means), 
                                          min_mean=torch.min(means))
                 progress_bar.update(x.size(0))
+        print("get_class_means: this wouldn't work unless it's mnist!")
         means /= 5000
+        return means
+
+
+def get_random_data(net, trainloader, shape, num_means):
+    with torch.no_grad():
+        x, y = next(iter(trainloader))
+        if type(x) in [tuple, list]:
+            x = x[0]
+        z = net(x)
+        idx = np.random.randint(x.shape[0], size=num_means)
+        means = z[idx]
+        classes = np.unique(y.cpu().numpy())
+        for cls in classes:
+            if cls == NO_LABEL:
+                continue
+            means[cls] = z[y==cls][0]
         return means
 
 
@@ -55,7 +73,7 @@ def get_class_means_unlabeled(trainloader, shape, scale=500):
         return means*scale
 
 
-def get_means(means_type, num_means=10, shape=(3, 32, 32), r=1, trainloader=None, device=None):
+def get_means(means_type, num_means=10, shape=(3, 32, 32), r=1, trainloader=None, device=None, net=None):
 
     D = np.prod(shape)
     means = torch.zeros((num_means, D)).to(device)
@@ -77,6 +95,10 @@ def get_means(means_type, num_means=10, shape=(3, 32, 32), r=1, trainloader=None
     elif means_type == "random":
         for i in range(num_means):
             means[i] = r * torch.randn(D)
+
+    elif means_type == "random_data":
+        means = get_random_data(net, trainloader, shape, num_means)
+
     else:
         raise NotImplementedError(means_type)
 
@@ -109,10 +131,12 @@ def test_classifier(epoch, net, testloader, device, loss_fn, writer=None, postfi
     acc_meter = AverageMeter()
     all_pred_labels = []
     all_xs = []
+    all_ys = []
     with torch.no_grad():
         with tqdm(total=len(testloader.dataset)) as progress_bar:
             for x, y in testloader:
                 all_xs.append(x.data.numpy())
+                all_ys.append(y.data.numpy())
                 x = x.to(device)
                 y = y.to(device)
                 z = net(x)
@@ -133,6 +157,7 @@ def test_classifier(epoch, net, testloader, device, loss_fn, writer=None, postfi
                 progress_bar.update(x.size(0))
     all_pred_labels = np.hstack(all_pred_labels)
     all_xs = np.vstack(all_xs)
+    all_ys = np.hstack(all_ys)
     
     if writer is not None:
         writer.add_scalar("test/loss{}".format(postfix), loss_meter.avg, epoch)
@@ -148,6 +173,8 @@ def test_classifier(epoch, net, testloader, device, loss_fn, writer=None, postfi
                 writer.add_scalar("test_clustering/num_class_{}_{}".format(cls,postfix), 
                     0., epoch)
                 continue
+            writer.add_histogram('label_distributions/num_class_{}_{}'.format(cls,postfix), 
+                    all_ys[all_pred_labels==cls], epoch)
             if show_classification_images:
                 images_cls = all_xs[all_pred_labels==cls][:10]
                 images_cls = torch.from_numpy(images_cls).float()

@@ -39,6 +39,7 @@ def train(epoch, net, trainloader, device, optimizer, opt_gmm, loss_fn,
     loss_nll_meter = utils.AverageMeter()
     jaclogdet_meter = utils.AverageMeter()
     acc_meter = utils.AverageMeter()
+    dist_loss_meter = utils.AverageMeter()
     with tqdm(total=trainloader.batch_sampler.num_labeled) as progress_bar:
         for x1, y in trainloader:
 
@@ -66,16 +67,26 @@ def train(epoch, net, trainloader, device, optimizer, opt_gmm, loss_fn,
                 loss_unsup = torch.tensor([0.])
                 loss = loss_nll
 
+            #TODO: fix
+            sigma = 1 / loss_fn.prior.inv_cov_stds[0]
+            means = loss_fn.prior.means
+            means_norms = torch.norm(means, dim=1)**2
+            dists = means_norms[:, None] + means_norms[None, :] - 2*means@means.t()
+            dist_loss = -(dists * (dists < (2*sigma)**2).float()).sum()
+            loss += dist_loss
+
             loss.backward()
             utils.clip_grad_norm(optimizer, max_grad_norm)
             optimizer.step()
             opt_gmm.step()
+
 
             preds = torch.argmax(logits_labeled, dim=1)
             acc = (preds == y_labeled).float().mean().item()
 
             acc_meter.update(acc, x1.size(0))
             loss_meter.update(loss.item(), x1.size(0))
+            dist_loss_meter.update(dist_loss.item(), x1.size(0))
             loss_unsup_meter.update(loss_unsup.item(), x1.size(0))
             loss_nll_meter.update(loss_nll.item(), x1.size(0))
             jaclogdet_meter.update(sldj.mean().item(), x1.size(0))
@@ -90,6 +101,7 @@ def train(epoch, net, trainloader, device, optimizer, opt_gmm, loss_fn,
     writer.add_scalar("train/loss_nll", loss_nll_meter.avg, epoch)
     writer.add_scalar("train/jaclogdet", jaclogdet_meter.avg, epoch)
     writer.add_scalar("train/acc", acc_meter.avg, epoch)
+    writer.add_scalar("train/dist_loss", dist_loss_meter.avg, epoch)
     writer.add_scalar("train/bpd", utils.bits_per_dim(x1, loss_unsup_meter.avg), epoch)
 
 
@@ -123,7 +135,8 @@ parser.add_argument('--weight_decay', default=5e-5, type=float,
 
 # PAVEL
 parser.add_argument('--means', 
-                    choices=['from_data', 'pixel_const', 'split_dims', 'split_dims_v2', 'random'], 
+                    choices=['from_data', 'pixel_const', 'split_dims', 
+                        'split_dims_v2', 'random', 'random_data'], 
                     default='random')
 parser.add_argument('--means_r', default=1., type=float,
                     help='r constant used when defyning means')
@@ -154,6 +167,8 @@ parser.add_argument('--lr_gmm', default=1e-2, type=float)
 # parser.add_argument('--joint', action='store_true')
 # parser.add_argument('--flow_iters', default=300, type=int)
 # parser.add_argument('--gmm_iters', default=100, type=int)
+parser.add_argument('--n_gaussians', default=4, type=int, 
+                    help='number of Gaussians')
 
 
 args = parser.parse_args()
@@ -186,6 +201,11 @@ if args.dataset.lower() == "ag_news":
     n_class = 4
     unlabeled_classes = [0]
     labeled_classes = [1,2,3]
+#    n_class = 7
+#    unlabeled_classes = [0, 1]
+#    labeled_classes = [2,3]
+#    unlabeled_classes = []
+#    labeled_classes = [0,1,2,3]
 
 for cls in unlabeled_classes:
     labels = trainloader.dataset.train_labels 
@@ -235,18 +255,16 @@ if args.resume is not None:
 
 #PAVEL: we need to find a good way of placing the means
 r = args.means_r 
-cov_std = torch.ones((n_class)) * args.cov_std
-cov_std = cov_std.to(device)
-means = utils.get_means(args.means, r=args.means_r, num_means=n_class, trainloader=trainloader, 
-                        shape=(embed_size,), device=device)
+inv_cov_std = torch.ones((args.n_gaussians,), device=device) / args.cov_std
+#TODO: need to used cov_std
+means = utils.get_means(args.means, r=args.means_r, num_means=args.n_gaussians, trainloader=trainloader, 
+                        shape=(embed_size,), device=device, net=net)
 
 if args.resume is not None:
     print("Using the means for ckpt")
     means = checkpoint['means']
 
 
-print("Means:", means)
-print("Cov std:", cov_std)
 means_np = means.cpu().numpy()
 print("Pairwise dists:", cdist(means_np, means_np))
 
@@ -259,10 +277,12 @@ if args.means_trainable:
     print("Using learnable means")
     means = torch.tensor(means_np, requires_grad=True, device=device)
 
-prior = SSLGaussMixture(means, device=device)
+prior = SSLGaussMixture(means, inv_cov_std, device=device)
 prior.weights.requires_grad = args.weights_trainable
 prior.inv_cov_stds.requires_grad = args.covs_trainable
 loss_fn = FlowLoss(prior)
+print("Means:", prior.means)
+print("Inv cov std:", prior.inv_cov_stds)
 
 #PAVEL: check why do we need this
 param_groups = utils.get_param_groups(net, args.weight_decay, norm_suffix='weight_g')
@@ -275,8 +295,14 @@ if args.optimizer == "SGD":
     optimizer = optim.SGD(param_groups, lr=args.lr)
 elif args.optimizer == "Adam":
     optimizer = optim.Adam(param_groups, lr=args.lr)
-    opt_gmm = optim.Adam([prior.means, prior.weights, prior.inv_cov_stds],
-                               lr=args.lr_gmm, weight_decay=0.)
+    #opt_gmm = optim.Adam([
+    #        {"name": "means", "params": [prior.means], "lr": args.lr_gmm},
+    #        {"name": "gmm_weight_cov", "params": [prior.weights, prior.inv_cov_stds], "lr": args.lr}], 
+    #        weight_decay=0.)
+    opt_gmm = optim.Adam([
+            {"name": "means", "params": [prior.means], "lr": args.lr_gmm},
+            {"name": "gmm_weight_cov", "params": [prior.weights, prior.inv_cov_stds], "lr": args.lr_gmm}], 
+            weight_decay=0.)
 else:
     raise ValueError("Unknown optimizer {}".format(args.optimizer))
 
@@ -320,8 +346,9 @@ for epoch in range(start_epoch, args.num_epochs):
     if epoch % args.eval_freq == 0:
         utils.test_classifier(epoch, net, testloader, device, loss_fn, writer)
 
+        weights_softmax = F.softmax(prior.weights)
         for i in range(len(prior.means)):
-            writer.add_scalar("train/gaussian_weight/{}".format(i), prior.weights[i], epoch)
+            writer.add_scalar("train/gaussian_weight/{}".format(i), weights_softmax[i], epoch)
 
         if args.swa:
             optimizer.swap_swa_sgd() 
