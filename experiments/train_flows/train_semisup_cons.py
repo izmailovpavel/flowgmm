@@ -16,6 +16,12 @@ import numpy as np
 from scipy.spatial.distance import cdist
 from torch.nn import functional as F
 from tqdm import tqdm
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import seaborn as sns
+import tensorflow as tf
 from tensorboardX import SummaryWriter
 
 import flow_ssl
@@ -254,7 +260,10 @@ if args.dataset.lower() != "cifar10":
     n_class = 10
     labels = trainloader.dataset.train_labels
     for cls in range(n_class):
-        print("Class {}: {} data".format(cls, (labels==cls).sum()))
+        if args.acc_train_all_labels:
+            print("Class {}: {} data".format(cls, (labels[:, 0]==cls).sum()))
+        else:
+            print("Class {}: {} data".format(cls, (labels==cls).sum()))
 
 if args.swa:
     bn_loader, _, _ = make_sup_data_loaders(
@@ -312,9 +321,6 @@ if args.means_trainable:
     print("Using learnable means")
     means = torch.tensor(means_np, requires_grad=True, device=device)
 
-mean_imgs = torchvision.utils.make_grid(
-        means.reshape((10, *img_shape)), nrow=5)
-writer.add_image("means", mean_imgs)
 prior = SSLGaussMixture(means, device=device)
 prior.weights.requires_grad = args.weights_trainable
 prior.inv_cov_stds.requires_grad = args.covs_trainable
@@ -384,11 +390,27 @@ for epoch in range(start_epoch, args.num_epochs):
             utils.test_classifier(epoch, net, testloader, device, loss_fn, 
                     writer, postfix="_swa")
 
-        mean_imgs = torchvision.utils.make_grid(
-                prior.means.reshape((10, *img_shape)), nrow=5)
-        writer.add_image("means", mean_imgs)
+        z_means = prior.means
+        data_means = net.module.inverse(z_means)
+        z_mean_imgs = torchvision.utils.make_grid(
+                z_means.reshape((10, *img_shape)), nrow=5)
+        data_mean_imgs = torchvision.utils.make_grid(
+                data_means.reshape((10, *img_shape)), nrow=5)
+        writer.add_image("z_means", z_mean_imgs, epoch)
+        writer.add_image("data_means", data_mean_imgs, epoch)
+
+        means_np = prior.means.detach().cpu().numpy()
+        fig = plt.figure(figsize=(8, 8))
+        sns.heatmap(cdist(means_np, means_np))
+        img_data = torch.tensor(np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep=''))
+        img_data = torch.tensor(img_data.reshape(fig.canvas.get_width_height()[::-1] + (3,))).transpose(0, 2).transpose(1, 2)
+        writer.add_image("mean dists", img_data, epoch)
+
         for i in range(10):
-            writer.add_scalar("train/gaussian_weight/{}".format(i), prior.weights[i], epoch)
+            writer.add_scalar("train/gaussian_weight/{}".format(i), F.softmax(prior.weights)[i], epoch)
+
+        for i in range(10):
+            writer.add_scalar("train/gaussian_cov/{}".format(i), F.softplus(prior.inv_cov_stds[i])**2, epoch)
 
         images = []
         for i in range(10):
