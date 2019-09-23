@@ -170,9 +170,9 @@ parser.add_argument('--resume', type=str, default=None, required=False, metavar=
 parser.add_argument('--weight_decay', default=5e-5, type=float,
                     help='L2 regularization (only applied to the weight norm scale factors)')
 
-# PAVEL
+
 parser.add_argument('--means', 
-                    choices=['from_data', 'pixel_const', 'split_dims', 'split_dims_v2', 'random'], 
+                    choices=['from_data', 'from_latent', 'from_z', 'pixel_const', 'split_dims', 'split_dims_v2', 'random'],
                     default='random')
 parser.add_argument('--means_r', default=1., type=float,
                     help='r constant used when defyning means')

@@ -88,7 +88,7 @@ def get_class_means_data(trainloader, shape, scale=1.):
         return means*scale
 
 
-def get_class_means_data(trainloader, shape, scale=1.):
+def get_class_means_z(trainloader, shape, scale=1.):
     ''' compute latent representation of means in data space '''
     with torch.no_grad():
         means = torch.zeros(shape)
@@ -122,7 +122,12 @@ def get_means(means_type, num_means=10, shape=(3, 32, 32), r=1, trainloader=None
 
     if means_type == "from_latent":
         print("Computing the means")
-        means = get_class_means_data(trainloader, (num_means, *shape))
+        means = get_class_means_latent(trainloader, (num_means, *shape))
+        means = means.reshape((10, -1)).to(device)
+
+    if means_type == "from_z":
+        print("Computing the means")
+        means = get_class_means_z(trainloader, (num_means, *shape))
         means = means.reshape((10, -1)).to(device)
 
     elif means_type == "pixel_const":
