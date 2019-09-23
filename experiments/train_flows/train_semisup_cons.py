@@ -383,7 +383,7 @@ for epoch in range(start_epoch, args.num_epochs):
 
     # Save samples and data
     if epoch % args.eval_freq == 0:
-        utils.test_classifier(epoch, net, testloader, device, loss_fn, writer, confusion=True)
+        utils.test_classifier(epoch, net, testloader, device, loss_fn, writer)
         if args.swa:
             optimizer.swap_swa_sgd() 
             print("updating bn")
