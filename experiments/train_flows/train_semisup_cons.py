@@ -171,7 +171,7 @@ parser.add_argument('--weight_decay', default=5e-5, type=float,
                     help='L2 regularization (only applied to the weight norm scale factors)')
 
 
-parser.add_argument('--means', 
+parser.add_argument('--means',
                     choices=['from_data', 'from_latent', 'from_z', 'pixel_const', 'split_dims', 'split_dims_v2', 'random'],
                     default='random')
 parser.add_argument('--means_r', default=1., type=float,
@@ -302,7 +302,7 @@ r = args.means_r
 cov_std = torch.ones((10)) * args.cov_std
 cov_std = cov_std.to(device)
 means = utils.get_means(args.means, r=args.means_r, trainloader=trainloader, 
-                        shape=img_shape, device=device)
+                        shape=img_shape, device=device, net=net)
 means_init = means.clone().detach()
 
 if args.resume is not None:

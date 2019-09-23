@@ -38,9 +38,9 @@ def get_class_means_latent(net, trainloader, shape, scale=1.):
                 else:
                     y = y_
 
-                z, = net(x)
+                z = net(x)
                 for i in range(10):
-                    means[i] += z[y == i].sum(dim=0).cpu() 
+                    means[i] += z[y == i].reshape((-1,) + means[i].shape).sum(dim=0).cpu()
                     #PAVEL: not the right way of computing means
                 progress_bar.set_postfix(max_mean=torch.max(means), 
                                          min_mean=torch.min(means))
@@ -88,7 +88,7 @@ def get_class_means_data(trainloader, shape, scale=1.):
         return means*scale
 
 
-def get_class_means_z(trainloader, shape, scale=1.):
+def get_class_means_z(net, trainloader, shape, scale=1.):
     ''' compute latent representation of means in data space '''
     with torch.no_grad():
         means = torch.zeros(shape)
@@ -117,17 +117,17 @@ def get_means(means_type, num_means=10, shape=(3, 32, 32), r=1, trainloader=None
 
     if means_type == "from_data":
         print("Computing the means")
-        means = get_class_means_data(trainloader, (num_means, *shape))
+        means = get_class_means_data(trainloader, (num_means, *shape), scale=r)
         means = means.reshape((10, -1)).to(device)
 
-    if means_type == "from_latent":
+    elif means_type == "from_latent":
         print("Computing the means")
-        means = get_class_means_latent(trainloader, (num_means, *shape))
+        means = get_class_means_latent(net, trainloader, (num_means, *shape), scale=r)
         means = means.reshape((10, -1)).to(device)
 
-    if means_type == "from_z":
+    elif means_type == "from_z":
         print("Computing the means")
-        means = get_class_means_z(trainloader, (num_means, *shape))
+        means = get_class_means_z(net, trainloader, (num_means, *shape), scale=r)
         means = means.reshape((10, -1)).to(device)
 
     elif means_type == "pixel_const":
@@ -179,6 +179,7 @@ def test_classifier(epoch, net, testloader, device, loss_fn, writer=None, postfi
     all_pred_labels = []
     all_xs = []
     all_ys = []
+    all_zs = []
     with torch.no_grad():
         with tqdm(total=len(testloader.dataset)) as progress_bar:
             for x, y in testloader:
@@ -187,6 +188,7 @@ def test_classifier(epoch, net, testloader, device, loss_fn, writer=None, postfi
                 x = x.to(device)
                 y = y.to(device)
                 z = net(x)
+                all_zs.append(z.cpu().data.numpy())
                 sldj = net.module.logdet()
                 loss = loss_fn(z, y=y, sldj=sldj)
                 loss_meter.update(loss.item(), x.size(0))
@@ -204,8 +206,9 @@ def test_classifier(epoch, net, testloader, device, loss_fn, writer=None, postfi
                 progress_bar.update(x.size(0))
     all_pred_labels = np.hstack(all_pred_labels)
     all_xs = np.vstack(all_xs)
+    all_zs = np.vstack(all_zs)
     all_ys = np.hstack(all_ys)
-    
+
     if writer is not None:
         writer.add_scalar("test/loss{}".format(postfix), loss_meter.avg, epoch)
         writer.add_scalar("test/acc{}".format(postfix), acc_meter.avg, epoch)
@@ -222,6 +225,13 @@ def test_classifier(epoch, net, testloader, device, loss_fn, writer=None, postfi
                 continue
             writer.add_histogram('label_distributions/num_class_{}_{}'.format(cls,postfix), 
                     all_ys[all_pred_labels==cls], epoch)
+
+            writer.add_histogram(
+                'distance_distributions/num_class_{}'.format(cls),
+                torch.norm(torch.tensor(all_zs[all_pred_labels==cls]) - loss_fn.prior.means[cls].cpu(), p=2, dim=1),
+                epoch
+            )
+
             if show_classification_images:
                 images_cls = all_xs[all_pred_labels==cls][:10]
                 images_cls = torch.from_numpy(images_cls).float()
