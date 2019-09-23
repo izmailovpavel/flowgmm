@@ -5,6 +5,12 @@ from .shell_util import AverageMeter
 from .optim_util import bits_per_dim
 import torchvision
 from flow_ssl.data import NO_LABEL
+import sklearn
+from sklearn.metrics import confusion_matrix
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 def wilson_schedule(lr_init, epoch, num_epochs):
@@ -124,7 +130,7 @@ def sample(net, prior, batch_size, cls, device, sample_shape):
 
 
 def test_classifier(epoch, net, testloader, device, loss_fn, writer=None, postfix="",
-                    show_classification_images=False):
+                    show_classification_images=False, confusion=False):
     net.eval()
     loss_meter = AverageMeter()
     jaclogdet_meter = AverageMeter()
@@ -182,3 +188,14 @@ def test_classifier(epoch, net, testloader, device, loss_fn, writer=None, postfi
                         images_cls, nrow=2, padding=2, pad_value=255)
                 writer.add_image("test_clustering/class_{}".format(cls), 
                         images_cls_concat)
+
+        if confusion:
+            fig = plt.figure(figsize=(8, 8))
+            cm = confusion_matrix(all_ys, all_pred_labels)
+            cm = np.around(cm.astype('float') / cm.sum(axis=1)[:, np.newaxis], decimals=2)
+            sns.heatmap(cm, annot=True, cmap=plt.cm.Blues)
+            plt.ylabel('True label')
+            plt.xlabel('Predicted label')
+            conf_img = torch.tensor(np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep=''))
+            conf_img = torch.tensor(conf_img.reshape(fig.canvas.get_width_height()[::-1] + (3,))).transpose(0, 2).transpose(1, 2)
+            writer.add_image("confusion", conf_img, epoch)

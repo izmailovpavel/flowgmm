@@ -302,6 +302,7 @@ cov_std = torch.ones((10)) * args.cov_std
 cov_std = cov_std.to(device)
 means = utils.get_means(args.means, r=args.means_r, trainloader=trainloader, 
                         shape=img_shape, device=device)
+means_init = means.clone().detach()
 
 if args.resume is not None:
     print("Using the means for ckpt")
@@ -382,7 +383,7 @@ for epoch in range(start_epoch, args.num_epochs):
 
     # Save samples and data
     if epoch % args.eval_freq == 0:
-        utils.test_classifier(epoch, net, testloader, device, loss_fn, writer)
+        utils.test_classifier(epoch, net, testloader, device, loss_fn, writer, confusion=True)
         if args.swa:
             optimizer.swap_swa_sgd() 
             print("updating bn")
@@ -404,13 +405,16 @@ for epoch in range(start_epoch, args.num_epochs):
         sns.heatmap(cdist(means_np, means_np))
         img_data = torch.tensor(np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep=''))
         img_data = torch.tensor(img_data.reshape(fig.canvas.get_width_height()[::-1] + (3,))).transpose(0, 2).transpose(1, 2)
-        writer.add_image("mean dists", img_data, epoch)
+        writer.add_image("mean_dists", img_data, epoch)
 
         for i in range(10):
-            writer.add_scalar("train/gaussian_weight/{}".format(i), F.softmax(prior.weights)[i], epoch)
+            writer.add_scalar("train_gmm/weight/{}".format(i), F.softmax(prior.weights)[i], epoch)
 
         for i in range(10):
-            writer.add_scalar("train/gaussian_cov/{}".format(i), F.softplus(prior.inv_cov_stds[i])**2, epoch)
+            writer.add_scalar("train_gmm/cov/{}".format(i), F.softplus(prior.inv_cov_stds[i])**2, epoch)
+
+        for i in range(10):
+            writer.add_scalar("train_gmm/mean_dist_init/{}".format(i), torch.norm(prior.means[i]-means_init[i], 2), epoch)
 
         images = []
         for i in range(10):
@@ -428,4 +432,4 @@ for epoch in range(start_epoch, args.num_epochs):
                                     os.path.join(args.ckptdir, 'samples/epoch_{}.png'.format(epoch)))
 
         if args.swa:
-            optimizer.swap_swa_sgd() 
+            optimizer.swap_swa_sgd()
