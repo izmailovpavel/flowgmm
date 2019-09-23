@@ -16,6 +16,12 @@ import numpy as np
 from scipy.spatial.distance import cdist
 from torch.nn import functional as F
 from tqdm import tqdm
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import seaborn as sns
+import tensorflow as tf
 from tensorboardX import SummaryWriter
 
 import flow_ssl
@@ -164,9 +170,9 @@ parser.add_argument('--resume', type=str, default=None, required=False, metavar=
 parser.add_argument('--weight_decay', default=5e-5, type=float,
                     help='L2 regularization (only applied to the weight norm scale factors)')
 
-# PAVEL
-parser.add_argument('--means', 
-                    choices=['from_data', 'pixel_const', 'split_dims', 'split_dims_v2', 'random'], 
+
+parser.add_argument('--means',
+                    choices=['from_data', 'from_latent', 'from_z', 'pixel_const', 'split_dims', 'split_dims_v2', 'random'],
                     default='random')
 parser.add_argument('--means_r', default=1., type=float,
                     help='r constant used when defyning means')
@@ -200,6 +206,7 @@ parser.add_argument('--lr_gmm', default=1e-2, type=float)
 # parser.add_argument('--joint', action='store_true')
 # parser.add_argument('--flow_iters', default=300, type=int)
 # parser.add_argument('--gmm_iters', default=100, type=int)
+parser.add_argument('--confusion', action='store_true')
 
 
 args = parser.parse_args()
@@ -254,7 +261,10 @@ if args.dataset.lower() != "cifar10":
     n_class = 10
     labels = trainloader.dataset.train_labels
     for cls in range(n_class):
-        print("Class {}: {} data".format(cls, (labels==cls).sum()))
+        if args.acc_train_all_labels:
+            print("Class {}: {} data".format(cls, (labels[:, 0]==cls).sum()))
+        else:
+            print("Class {}: {} data".format(cls, (labels==cls).sum()))
 
 if args.swa:
     bn_loader, _, _ = make_sup_data_loaders(
@@ -292,7 +302,8 @@ r = args.means_r
 cov_std = torch.ones((10)) * args.cov_std
 cov_std = cov_std.to(device)
 means = utils.get_means(args.means, r=args.means_r, trainloader=trainloader, 
-                        shape=img_shape, device=device)
+                        shape=img_shape, device=device, net=net)
+means_init = means.clone().detach()
 
 if args.resume is not None:
     print("Using the means for ckpt")
@@ -312,9 +323,6 @@ if args.means_trainable:
     print("Using learnable means")
     means = torch.tensor(means_np, requires_grad=True, device=device)
 
-mean_imgs = torchvision.utils.make_grid(
-        means.reshape((10, *img_shape)), nrow=5)
-writer.add_image("means", mean_imgs)
 prior = SSLGaussMixture(means, device=device)
 prior.weights.requires_grad = args.weights_trainable
 prior.inv_cov_stds.requires_grad = args.covs_trainable
@@ -376,7 +384,7 @@ for epoch in range(start_epoch, args.num_epochs):
 
     # Save samples and data
     if epoch % args.eval_freq == 0:
-        utils.test_classifier(epoch, net, testloader, device, loss_fn, writer)
+        utils.test_classifier(epoch, net, testloader, device, loss_fn, writer, confusion=args.confusion)
         if args.swa:
             optimizer.swap_swa_sgd() 
             print("updating bn")
@@ -384,11 +392,30 @@ for epoch in range(start_epoch, args.num_epochs):
             utils.test_classifier(epoch, net, testloader, device, loss_fn, 
                     writer, postfix="_swa")
 
-        mean_imgs = torchvision.utils.make_grid(
-                prior.means.reshape((10, *img_shape)), nrow=5)
-        writer.add_image("means", mean_imgs)
+        z_means = prior.means
+        data_means = net.module.inverse(z_means)
+        z_mean_imgs = torchvision.utils.make_grid(
+                z_means.reshape((10, *img_shape)), nrow=5)
+        data_mean_imgs = torchvision.utils.make_grid(
+                data_means.reshape((10, *img_shape)), nrow=5)
+        writer.add_image("z_means", z_mean_imgs, epoch)
+        writer.add_image("data_means", data_mean_imgs, epoch)
+
+        means_np = prior.means.detach().cpu().numpy()
+        fig = plt.figure(figsize=(8, 8))
+        sns.heatmap(cdist(means_np, means_np))
+        img_data = torch.tensor(np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep=''))
+        img_data = torch.tensor(img_data.reshape(fig.canvas.get_width_height()[::-1] + (3,))).transpose(0, 2).transpose(1, 2)
+        writer.add_image("mean_dists", img_data, epoch)
+
         for i in range(10):
-            writer.add_scalar("train/gaussian_weight/{}".format(i), prior.weights[i], epoch)
+            writer.add_scalar("train_gmm/weight/{}".format(i), F.softmax(prior.weights)[i], epoch)
+
+        for i in range(10):
+            writer.add_scalar("train_gmm/cov/{}".format(i), F.softplus(prior.inv_cov_stds[i])**2, epoch)
+
+        for i in range(10):
+            writer.add_scalar("train_gmm/mean_dist_init/{}".format(i), torch.norm(prior.means[i]-means_init[i], 2), epoch)
 
         images = []
         for i in range(10):
@@ -406,4 +433,4 @@ for epoch in range(start_epoch, args.num_epochs):
                                     os.path.join(args.ckptdir, 'samples/epoch_{}.png'.format(epoch)))
 
         if args.swa:
-            optimizer.swap_swa_sgd() 
+            optimizer.swap_swa_sgd()

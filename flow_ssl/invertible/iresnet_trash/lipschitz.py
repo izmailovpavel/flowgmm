@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch._six import container_abcs
 from itertools import repeat
 
-#from .mixed_lipschitz import InducedNormLinear, InducedNormConv2d
+# from .mixed_lipschitz import InducedNormLinear, InducedNormConv2d
 
 __all__ = ['SpectralNormLinear', 'SpectralNormConv2d', 'LopLinear', 'LopConv2d', 'get_linear', 'get_conv2d']
 
