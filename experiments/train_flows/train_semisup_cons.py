@@ -206,6 +206,7 @@ parser.add_argument('--lr_gmm', default=1e-2, type=float)
 # parser.add_argument('--joint', action='store_true')
 # parser.add_argument('--flow_iters', default=300, type=int)
 # parser.add_argument('--gmm_iters', default=100, type=int)
+parser.add_argument('--confusion', action='store_true')
 
 
 args = parser.parse_args()
@@ -383,7 +384,7 @@ for epoch in range(start_epoch, args.num_epochs):
 
     # Save samples and data
     if epoch % args.eval_freq == 0:
-        utils.test_classifier(epoch, net, testloader, device, loss_fn, writer)
+        utils.test_classifier(epoch, net, testloader, device, loss_fn, writer, confusion=args.confusion)
         if args.swa:
             optimizer.swap_swa_sgd() 
             print("updating bn")

@@ -25,23 +25,31 @@ def wilson_schedule(lr_init, epoch, num_epochs):
     return lr_init * factor
 
 
-def get_class_means(net, trainloader, shape):
+def get_class_means_latent(net, trainloader, shape, scale=1.):
+    ''' use labeled latent representations to compute means '''
     with torch.no_grad():
         means = torch.zeros(shape)
         n_batches = 0
         with tqdm(total=len(trainloader.dataset)) as progress_bar:
             n_batches = len(trainloader)
-            for x, y in trainloader:
-                z, _ = net(x)
+            for (x, x2), y_ in trainloader:
+                if len(y_.shape) == 2:
+                    y, _ = y_[:, 0], y_[:, 1]
+                else:
+                    y = y_
+
+                z, = net(x)
                 for i in range(10):
                     means[i] += z[y == i].sum(dim=0).cpu() 
                     #PAVEL: not the right way of computing means
                 progress_bar.set_postfix(max_mean=torch.max(means), 
                                          min_mean=torch.min(means))
                 progress_bar.update(x.size(0))
-        print("get_class_means: this wouldn't work unless it's mnist!")
-        means /= 5000
-        return means
+
+        for i in range(10):
+            means[i] /= sum(trainloader.dataset.train_labels[:, 0] == i)
+
+        return means*scale
 
 
 def get_random_data(net, trainloader, shape, num_means):
@@ -60,7 +68,8 @@ def get_random_data(net, trainloader, shape, num_means):
         return means
 
 
-def get_class_means_unlabeled(trainloader, shape, scale=500):
+def get_class_means_data(trainloader, shape, scale=1.):
+    ''' use labeled data to compute means '''
     with torch.no_grad():
         means = torch.zeros(shape)
         with tqdm(total=len(trainloader.dataset)) as progress_bar:
@@ -79,6 +88,28 @@ def get_class_means_unlabeled(trainloader, shape, scale=500):
         return means*scale
 
 
+def get_class_means_data(trainloader, shape, scale=1.):
+    ''' compute latent representation of means in data space '''
+    with torch.no_grad():
+        means = torch.zeros(shape)
+        with tqdm(total=len(trainloader.dataset)) as progress_bar:
+            for (x, x2), y_ in trainloader:
+                if len(y_.shape) == 2:
+                    y, _ = y_[:, 0], y_[:, 1]
+                else:
+                    y = y_
+
+                for i in range(10):
+                    means[i] += x[y == i].sum(dim=0).cpu()
+
+        for i in range(10):
+            means[i] /= sum(trainloader.dataset.train_labels[:, 0] == i)
+
+        z_means = net(means)
+
+        return z_means*scale
+
+
 def get_means(means_type, num_means=10, shape=(3, 32, 32), r=1, trainloader=None, device=None, net=None):
 
     D = np.prod(shape)
@@ -86,7 +117,12 @@ def get_means(means_type, num_means=10, shape=(3, 32, 32), r=1, trainloader=None
 
     if means_type == "from_data":
         print("Computing the means")
-        means = get_class_means_unlabeled(trainloader, (num_means, *shape))
+        means = get_class_means_data(trainloader, (num_means, *shape))
+        means = means.reshape((10, -1)).to(device)
+
+    if means_type == "from_latent":
+        print("Computing the means")
+        means = get_class_means_data(trainloader, (num_means, *shape))
         means = means.reshape((10, -1)).to(device)
 
     elif means_type == "pixel_const":
