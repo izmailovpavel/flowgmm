@@ -98,7 +98,7 @@ def make_ssl_npz_data_loaders(
 
     if return_all_labels:
         train_set.train_labels = np.hstack([train_set.train_labels[:, None],
-                                        train_set.train_labels[:, None]])
+                                            train_set.train_labels[:, None]])
         train_set.train_labels[unlabeled_idxs, 0] = NO_LABEL
     else:
         train_set.train_labels[unlabeled_idxs] = NO_LABEL

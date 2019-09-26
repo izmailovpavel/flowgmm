@@ -56,36 +56,36 @@ mkdir -p "${DATADIR}"
 
 # Small datasets first
 
-for i in {0..0}
-do
-  echo "Downloading dataset ${DATASET[i]}"
-  if [ ! -f "${DATADIR}/${DATASET[i]}.train" ]
-  then
-    wget -c "https://drive.google.com/uc?export=download&id=${ID[i]}" -O "${DATADIR}/${DATASET[i]}_csv.tar.gz"
-    tar -xzvf "${DATADIR}/${DATASET[i]}_csv.tar.gz" -C "${DATADIR}"
-    cat "${DATADIR}/${DATASET[i]}_csv/train.csv" | normalize_text > "${DATADIR}/${DATASET[i]}.train"
-    cat "${DATADIR}/${DATASET[i]}_csv/test.csv" | normalize_text > "${DATADIR}/${DATASET[i]}.test"
-  fi
-done
-
-## Large datasets require a bit more work due to the extra request page
-#
-#for i in {1..7}
+#for i in {0..0}
 #do
 #  echo "Downloading dataset ${DATASET[i]}"
 #  if [ ! -f "${DATADIR}/${DATASET[i]}.train" ]
 #  then
-#    curl -c /tmp/cookies "https://drive.google.com/uc?export=download&id=${ID[i]}" > /tmp/intermezzo.html
-#    curl -L -b /tmp/cookies "https://drive.google.com$(cat /tmp/intermezzo.html | grep -Po 'uc-download-link" [^>]* href="\K[^"]*' | sed 's/\&amp;/\&/g')" > "${DATADIR}/${DATASET[i]}_csv.tar.gz"
+#    wget -c "https://drive.google.com/uc?export=download&id=${ID[i]}" -O "${DATADIR}/${DATASET[i]}_csv.tar.gz"
 #    tar -xzvf "${DATADIR}/${DATASET[i]}_csv.tar.gz" -C "${DATADIR}"
 #    cat "${DATADIR}/${DATASET[i]}_csv/train.csv" | normalize_text > "${DATADIR}/${DATASET[i]}.train"
 #    cat "${DATADIR}/${DATASET[i]}_csv/test.csv" | normalize_text > "${DATADIR}/${DATASET[i]}.test"
 #  fi
 #done
 
-#make
+# Large datasets require a bit more work due to the extra request page
 
-#for i in {0..7}
+for i in {5..5}
+do
+  echo "Downloading dataset ${DATASET[i]}"
+  if [ ! -f "${DATADIR}/${DATASET[i]}.train" ]
+  then
+    curl -c /tmp/cookies "https://drive.google.com/uc?export=download&id=${ID[i]}" > /tmp/intermezzo.html
+    curl -L -b /tmp/cookies "https://drive.google.com$(cat /tmp/intermezzo.html | grep -Po 'uc-download-link" [^>]* href="\K[^"]*' | sed 's/\&amp;/\&/g')" > "${DATADIR}/${DATASET[i]}_csv.tar.gz"
+    tar -xzvf "${DATADIR}/${DATASET[i]}_csv.tar.gz" -C "${DATADIR}"
+    cat "${DATADIR}/${DATASET[i]}_csv/train.csv" | normalize_text > "${DATADIR}/${DATASET[i]}.train"
+    cat "${DATADIR}/${DATASET[i]}_csv/test.csv" | normalize_text > "${DATADIR}/${DATASET[i]}.test"
+  fi
+done
+
+##make
+#
+#for i in {2..2}
 #do
 #  echo "Working on dataset ${DATASET[i]}"
 #  ./fasttext supervised -input "${DATADIR}/${DATASET[i]}.train" \
