@@ -28,6 +28,14 @@ class RealNVPBase(nn.Module):
 
     def inverse(self,z):
         return self.body.inverse(z)
+    
+    def nll(self,x,y=None,label_weight=1.):
+        z = self(x)
+        logdet = self.logdet()
+        z = z.reshape((z.shape[0], -1))
+        prior_ll = self.prior.log_prob(z, y,label_weight=label_weight)
+        nll = -(prior_ll + logdet)
+        return nll
 
 #TODO: batchnorm?
 class RealNVP(RealNVPBase):
