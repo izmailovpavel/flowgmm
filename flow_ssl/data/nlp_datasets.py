@@ -5,7 +5,11 @@ from torch.utils.data import Dataset
 
 
 class AG_News(Dataset):
-    def __init__(self, root, train=True, transform=None, target_transform=None, 
+    num_classes=4
+    class_weights=None
+    ignored_index=-100
+    dim = 768
+    def __init__(self, root=os.path.expanduser('~/datasets/AGNEWS/'), train=True, transform=None, target_transform=None, 
                  download=False):
         if download:
             raise ValueError("Please run the data preparation scripts and set `download=False`")
@@ -39,6 +43,32 @@ class AG_News(Dataset):
             return self.train_data[idx], self.train_labels[idx]
         else:
             return self.test_data[idx], self.test_labels[idx]
+
+
+
+class YAHOO(Dataset):
+    num_classes=10
+    class_weights=None
+    ignored_index=-100
+    dim = 768
+    def __init__(self, root=os.path.expanduser('~/datasets/YAHOO/'), train=True):
+        super().__init__()
+        train_path = os.path.join(root, "yahoo_train.npz") 
+        test_path = os.path.join(root, "yahoo_test.npz")
+        train_data = np.load(train_path)
+        test_data = np.load(test_path)
+        self.X_train, self.y_train = train_data["encodings"], train_data["labels"]
+        self.X_test, self.y_test = test_data["encodings"], test_data["labels"]
+        self.X_test = self.X_test[:10000]
+        self.y_test = self.y_test[:10000]
+        self.X = torch.from_numpy(self.X_train if train else self.X_test).float()
+        self.Y = torch.from_numpy(self.y_train if train else self.y_test).long()
+
+    def __len__(self):
+        return self.X.shape[0]
+
+    def __getitem__(self, idx):
+        return self.X[idx],self.Y[idx]
 
         
 
