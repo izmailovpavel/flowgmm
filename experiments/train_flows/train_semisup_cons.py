@@ -11,11 +11,6 @@ import torch.backends.cudnn as cudnn
 import torch.utils.data as data
 import torchvision
 import torchvision.transforms as transforms
-import utils
-import numpy as np
-from scipy.spatial.distance import cdist
-from torch.nn import functional as F
-from tqdm import tqdm
 
 import matplotlib
 matplotlib.use('Agg')
@@ -23,6 +18,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import tensorflow as tf
 from tensorboardX import SummaryWriter
+
+import utils
+import numpy as np
+from scipy.spatial.distance import cdist
+from torch.nn import functional as F
+from tqdm import tqdm
 
 import flow_ssl
 from flow_ssl.realnvp import RealNVP 
