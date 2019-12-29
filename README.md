@@ -7,6 +7,9 @@ by Pavel Izmailov, Polina Kirichenko, Marc Finzi and Andrew Gordon Wilson.
 
 # Introduction
 
+![Screenshot from 2019-12-29 19-32-26](https://user-images.githubusercontent.com/14368801/71559657-fa771280-2a71-11ea-8deb-5b3b422c6c8f.png)
+
+
 # Dependencies
 * [PyTorch](http://pytorch.org/) version 1.0.1
 * [torchvision](https://github.com/pytorch/vision/) version 0.2.1
@@ -15,6 +18,10 @@ by Pavel Izmailov, Polina Kirichenko, Marc Finzi and Andrew Gordon Wilson.
 # Usage
 
 ## Examples
+
+```bash
+python3 experiments/train_flows/train_semisup_cons.py --dataset=MNIST --data_path=data/mnist/ --label_path=data/labels/mnist/100_balanced_labels/10.npz --logdir=<LOGDIR> --ckptdir=<CKPTDIR> --save_freq=5000 --means=random --means_r=1. --num_epochs=30000 --label_weight=3 --consistency_weight=1. --consistency_rampup=1000 --lr=1e-5 --eval_freq=100 --flow=RealNVP
+```
 
 # References
 
