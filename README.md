@@ -27,6 +27,10 @@ applying FlowGMM to labeled data only.
 
 ## NLP datasets
 
+To run experiments on the text data you first need to download the data and compute BERT embeddings. 
+To get the data run `data/nlp_datasets/get_text_classification_data.sh`. 
+Then, you [this ipython notebook](https://github.com/izmailovpavel/flow_ssl/blob/public/data/nlp_datasets/text_preprocessing/AGNewsPreprocessing.ipynb) shows an example of computing BERT embeddings for the data.
+
 ## UCI datasets
 
 ## Image Classification
