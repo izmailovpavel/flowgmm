@@ -56,21 +56,21 @@ mkdir -p "${DATADIR}"
 
 # Small datasets first
 
-#for i in {0..0}
-#do
-#  echo "Downloading dataset ${DATASET[i]}"
-#  if [ ! -f "${DATADIR}/${DATASET[i]}.train" ]
-#  then
-#    wget -c "https://drive.google.com/uc?export=download&id=${ID[i]}" -O "${DATADIR}/${DATASET[i]}_csv.tar.gz"
-#    tar -xzvf "${DATADIR}/${DATASET[i]}_csv.tar.gz" -C "${DATADIR}"
-#    cat "${DATADIR}/${DATASET[i]}_csv/train.csv" | normalize_text > "${DATADIR}/${DATASET[i]}.train"
-#    cat "${DATADIR}/${DATASET[i]}_csv/test.csv" | normalize_text > "${DATADIR}/${DATASET[i]}.test"
-#  fi
-#done
+for i in {0..0}
+do
+  echo "Downloading dataset ${DATASET[i]}"
+  if [ ! -f "${DATADIR}/${DATASET[i]}.train" ]
+  then
+    wget -c "https://drive.google.com/uc?export=download&id=${ID[i]}" -O "${DATADIR}/${DATASET[i]}_csv.tar.gz"
+    tar -xzvf "${DATADIR}/${DATASET[i]}_csv.tar.gz" -C "${DATADIR}"
+    cat "${DATADIR}/${DATASET[i]}_csv/train.csv" | normalize_text > "${DATADIR}/${DATASET[i]}.train"
+    cat "${DATADIR}/${DATASET[i]}_csv/test.csv" | normalize_text > "${DATADIR}/${DATASET[i]}.test"
+  fi
+done
 
 # Large datasets require a bit more work due to the extra request page
 
-for i in {5..5}
+for i in {5 .. 5}
 do
   echo "Downloading dataset ${DATASET[i]}"
   if [ ! -f "${DATADIR}/${DATASET[i]}.train" ]
@@ -82,15 +82,3 @@ do
     cat "${DATADIR}/${DATASET[i]}_csv/test.csv" | normalize_text > "${DATADIR}/${DATASET[i]}.test"
   fi
 done
-
-##make
-#
-#for i in {2..2}
-#do
-#  echo "Working on dataset ${DATASET[i]}"
-#  ./fasttext supervised -input "${DATADIR}/${DATASET[i]}.train" \
-#    -output "${RESULTDIR}/${DATASET[i]}" -dim 10 -lr "${LR[i]}" -wordNgrams 2 \
-#    -minCount 1 -bucket 10000000 -epoch 5 -thread 4 > /dev/null
-#  ./fasttext test "${RESULTDIR}/${DATASET[i]}.bin" \
-#    "${DATADIR}/${DATASET[i]}.test"
-#done
