@@ -1,4 +1,4 @@
-# Stochastic Weight Averaging (SWA)
+# Flow Gaussian Mixture Model (FlowGMM)
 This repository contains a PyTorch implementation of the Flow Gaussian Mixture Model (FlowGMM) model from our paper
 
 [Semi-Supervised Learning with Normalizing Flows ](https://invertibleworkshop.github.io/accepted_papers/pdfs/INNF_2019_paper_28.pdf)
