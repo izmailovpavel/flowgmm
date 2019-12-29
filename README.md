@@ -17,6 +17,14 @@ by Pavel Izmailov, Polina Kirichenko, Marc Finzi and Andrew Gordon Wilson.
 
 # Usage
 
+We provide the scripts and example commands to reproduce the experiments from the paper. 
+
+## Synthetic Datasets
+
+The experiments on synthetic data are implemented in [this ipython notebook](https://github.com/izmailovpavel/flow_ssl/blob/public/experiments/synthetic_data/synthetic.ipynb).
+We additionaly provide [another ipython notebook](https://github.com/izmailovpavel/flow_ssl/blob/public/experiments/synthetic_data/synthetic-labeled-only.ipynb)
+applying FlowGMM to labeled data only. 
+
 ## Examples
 
 ```bash
