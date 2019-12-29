@@ -71,13 +71,20 @@ Parameters:
 * ```EVALFREQ``` &mdash; number of epochs between evaluation (default: `1`)
 
 
-### Examples
+Examples:
 
 ```bash
+# MNIST, 100 labeled datapoints
 python3 experiments/train_flows/train_semisup_cons.py --dataset=MNIST --data_path=data/images/mnist/ \
   --label_path=data/labels/mnist/100_balanced_labels/10.npz --logdir=<LOGDIR> --ckptdir=<CKPTDIR> \
-  --save_freq=5000 --num_epochs=30000 --label_weight=3 --consistency_weight=1. --consistency_rampup=1000 \
+  --save_freq=5000 --num_epochs=30001 --label_weight=3 --consistency_weight=1. --consistency_rampup=1000 \
   --lr=1e-5 --eval_freq=100 
+  
+# CIFAR-10, 4000 labeled datapoints
+python3 experiments/train_flows/train_semisup_cons.py --dataset=CIFAR10 --data_path=data/images/cifar/cifar10/by-image/ \
+  --label_path=data/labels/cifar10/4000_balanced_labels/10.txt --logdir=<LOGDIR> --ckptdir=<CKPTDIR> \ 
+  --save_freq=500 --num_epochs=1501 --label_weight=3 --consistency_weight=1. --consistency_rampup=100 \
+  --lr=1e-4 --eval_freq=50
 ```
 
 # References
