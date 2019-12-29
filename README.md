@@ -1,5 +1,21 @@
-# Flow-based semi-supervised learning
+# Stochastic Weight Averaging (SWA)
+This repository contains a PyTorch implementation of the Flow Gaussian Mixture Model (FlowGMM) model from our paper
 
-In this repo we try to use normalizing flows for semi-supervised learning. Cat:
+[Semi-Supervised Learning with Normalizing Flows ](https://invertibleworkshop.github.io/accepted_papers/pdfs/INNF_2019_paper_28.pdf)
 
-![cat](https://user-images.githubusercontent.com/14368801/54647733-0dd46680-4a7a-11e9-9dcb-9893db8cff17.png)
+by Pavel Izmailov, Polina Kirichenko, Marc Finzi and Andrew Gordon Wilson.
+
+# Introduction
+
+# Dependencies
+* [PyTorch](http://pytorch.org/)
+* [torchvision](https://github.com/pytorch/vision/)
+* [tensorboardX](https://github.com/lanpa/tensorboardX)
+
+# Usage
+
+## Examples
+
+# References
+
+* RealNVP: [github.com/chrischute/real-nvp](https://github.com/chrischute/real-nvp)
