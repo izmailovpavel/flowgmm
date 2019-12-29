@@ -68,7 +68,7 @@ def load_data_no_discrete(path):
     data_test = data_test.drop(data_test.columns[0], axis=1)
     # Because the data set is messed up!
     data_test = data_test.drop(data_test.columns[-1], axis=1)
-    print(f"Fraction of positives {train_labels.mean()} train, {test_labels.mean()} test")
+    print("Fraction of positives {} train, {} test".format(train_labels.mean(), test_labels.mean()))
     return data_train, data_test, train_labels, test_labels
 
 

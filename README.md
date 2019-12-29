@@ -8,8 +8,8 @@ by Pavel Izmailov, Polina Kirichenko, Marc Finzi and Andrew Gordon Wilson.
 # Introduction
 
 # Dependencies
-* [PyTorch](http://pytorch.org/)
-* [torchvision](https://github.com/pytorch/vision/)
+* [PyTorch](http://pytorch.org/) version 1.0.1
+* [torchvision](https://github.com/pytorch/vision/) version 0.2.1
 * [tensorboardX](https://github.com/lanpa/tensorboardX)
 
 # Usage

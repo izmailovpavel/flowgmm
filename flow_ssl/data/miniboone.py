@@ -48,7 +48,7 @@ def load_data(root_path):
     data = pd.read_csv(root_path, names=[str(x) for x in range(50)], delim_whitespace=True)
     nsignal = int(data.iloc[0][0])
     nbackground = int(data.iloc[0][1])
-    print(f"{nsignal} signal, {nbackground} background")
+    print("{} signal, {} background".format(nsignal, nbackground))
     minimum = min(nsignal,nbackground)
     labels = np.concatenate((np.ones(minimum),np.zeros(minimum)))
     data = data.iloc[1:].values
