@@ -25,14 +25,6 @@ The experiments on synthetic data are implemented in [this ipython notebook](htt
 We additionaly provide [another ipython notebook](https://github.com/izmailovpavel/flow_ssl/blob/public/experiments/synthetic_data/synthetic-labeled-only.ipynb)
 applying FlowGMM to labeled data only. 
 
-## NLP datasets
-
-To run experiments on the text data you first need to download the data and compute BERT embeddings. 
-To get the data run `data/nlp_datasets/get_text_classification_data.sh`. 
-Then, you [this ipython notebook](https://github.com/izmailovpavel/flow_ssl/blob/public/data/nlp_datasets/text_preprocessing/AGNewsPreprocessing.ipynb) shows an example of computing BERT embeddings for the data.
-
-## UCI datasets
-
 ## Image Classification
 
 To run experiments with FlowGMM on image classification problems you first need to download and prepare the data.
@@ -89,7 +81,33 @@ python3 experiments/train_flows/train_semisup_cons.py --dataset=CIFAR10 --data_p
   --label_path=data/labels/cifar10/4000_balanced_labels/10.txt --logdir=<LOGDIR> --ckptdir=<CKPTDIR> \ 
   --save_freq=500 --num_epochs=1501 --label_weight=3 --consistency_weight=1. --consistency_rampup=100 \
   --lr=1e-4 --eval_freq=50
-```
+  ```
+
+## Tabular Data: UCI and NLP
+
+For class balanced data splitting and for training of FlowGMM on the UCI and NLP datasets, we use the
+[snake-oil-ml](https://github.com/mfinzi/snake-oil-ml/) library.
+
+### UCI Data Preparation
+
+Downdload the miniboone and hepmass datasets [here](https://zenodo.org/record/1161203#.Wmtf_XVl8eN)
+We follow the preprocessing (where sensible) from [Masked Autoregressive Flow for Density Estimation] (https://github.com/gpapamak/maf).
+Unpack the files into a reasonable location (the default expected location for the files are ~/datasets/UCI/hepmass/ and ~/datasets/UCI/miniboone/)
+
+### NLP Data Preparation
+
+To run experiments on the text data, you first need to download the data and compute the BERT embeddings. To get the data run `data/nlp_datasets/get_text_classification_data.sh`. 
+Then, you [this ipython notebook](https://github.com/izmailovpavel/flow_ssl/blob/public/data/nlp_datasets/text_preprocessing/AGNewsPreprocessing.ipynb) shows an example of computing BERT embeddings for the data.
+
+### Baselines
+
+After the data has been prepared, the notebook [here](https://github.com/izmailovpavel/flow_ssl/blob/public/experiments/baselines/graphssl.ipynb) can be used to reproduce the kNN, Logistic Regression, and Label Spreading baselines.
+
+### Running FlowGMM on the Tabular Data
+
+
+
+
 
 # References
 
