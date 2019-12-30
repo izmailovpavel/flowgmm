@@ -105,7 +105,7 @@ After the data has been prepared, the notebook [here](https://github.com/izmailo
 
 The 3-Layer NN with dropout and Pi-Model baseline experiments are implemented in [train_semisup_text_baselines.py](https://github.com/izmailovpavel/flow_ssl/blob/public/experiments/train_flows/train_semisup_text_baselines.py).
 
-Finally the FlowGMM method can be trained on these datasets using [train_semisup_flowgmm_tabular](https://github.com/izmailovpavel/flow_ssl/blob/public/experiments/train_flows/train_semisup_flowgmm_tabular.py).
+Finally the FlowGMM method can be trained on these datasets using [train_semisup_flowgmm_tabular.py](https://github.com/izmailovpavel/flow_ssl/blob/public/experiments/train_flows/train_semisup_flowgmm_tabular.py).
 
 
 # References
