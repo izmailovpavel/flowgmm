@@ -91,7 +91,7 @@ For class balanced data splitting and for training of FlowGMM on the UCI and NLP
 ### UCI Data Preparation
 
 Downdload the miniboone and hepmass datasets [here](https://zenodo.org/record/1161203#.Wmtf_XVl8eN)
-We follow the preprocessing (where sensible) from [Masked Autoregressive Flow for Density Estimation] (https://github.com/gpapamak/maf).
+We follow the preprocessing (where sensible) from [Masked Autoregressive Flow for Density Estimation](https://github.com/gpapamak/maf).
 Unpack the files into a reasonable location (the default expected location for the files are ~/datasets/UCI/hepmass/ and ~/datasets/UCI/miniboone/)
 
 ### NLP Data Preparation
@@ -99,14 +99,13 @@ Unpack the files into a reasonable location (the default expected location for t
 To run experiments on the text data, you first need to download the data and compute the BERT embeddings. To get the data run `data/nlp_datasets/get_text_classification_data.sh`. 
 Then, you [this ipython notebook](https://github.com/izmailovpavel/flow_ssl/blob/public/data/nlp_datasets/text_preprocessing/AGNewsPreprocessing.ipynb) shows an example of computing BERT embeddings for the data.
 
-### Baselines
+### Running the Models
 
-After the data has been prepared, the notebook [here](https://github.com/izmailovpavel/flow_ssl/blob/public/experiments/baselines/graphssl.ipynb) can be used to reproduce the kNN, Logistic Regression, and Label Spreading baselines.
+After the data has been prepared, the notebook [here](https://github.com/izmailovpavel/flow_ssl/blob/public/experiments/baselines/graphssl.ipynb) can be used to run the kNN, Logistic Regression, and Label Spreading baselines.
 
-### Running FlowGMM on the Tabular Data
+The 3-Layer NN with dropout and Pi-Model baseline experiments are implemented in [train_semisup_text_baselines.py](https://github.com/izmailovpavel/flow_ssl/blob/public/experiments/train_flows/train_semisup_text_baselines.py).
 
-
-
+Finally the FlowGMM method can be trained on these datasets using [train_semisup_flowgmm_tabular](https://github.com/izmailovpavel/flow_ssl/blob/public/experiments/train_flows/train_semisup_flowgmm_tabular.py).
 
 
 # References
