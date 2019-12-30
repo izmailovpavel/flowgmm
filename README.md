@@ -10,8 +10,8 @@ by Pavel Izmailov, Polina Kirichenko, Marc Finzi and Andrew Gordon Wilson.
 Normalizing flows transform a latent distribution through an invertible neural network for a flexible and pleasingly simple approach to generative modelling, while preserving an exact likelihood.
 In this paper, we introduce FlowGMM (Flow Gaussian Mixture Model), an approach to semi-supervised learning with normalizing flows, by modelling the density in the *latent space* as a Gaussian mixture, with each mixture component corresponding to a class represented in the labelled data.
 FlowGMM is distinct in its simplicity, unified treatment of labelled and unlabelled data with an exact likelihood, interpretability, and broad applicability beyond image data.
-We show promising results on a wide range of applications, including AG-News and Yahoo Answers text data, tabular data, and semi-supervised image classification (on MNIST, CIFAR-10 and SVHN datasets).
-We also show that FlowGMM can discover interpretable structure, provide real-time optimization-free feature visualizations, and specify well calibrated predictive distributions.
+
+We show promising results on a wide range of semi-supervised classification problems, including AG-News and Yahoo Answers text data, UCI tabular data, and image datasets (MNIST, CIFAR-10 and SVHN).
 
 ![Screenshot from 2019-12-29 19-32-26](https://user-images.githubusercontent.com/14368801/71559657-fa771280-2a71-11ea-8deb-5b3b422c6c8f.png)
 
