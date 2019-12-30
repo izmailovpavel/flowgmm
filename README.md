@@ -96,9 +96,9 @@ For class balanced data splitting and for training of FlowGMM on the UCI and NLP
 
 ### UCI Data Preparation
 
-Downdload the miniboone and hepmass datasets [here](https://zenodo.org/record/1161203#.Wmtf_XVl8eN)
+Downdload the miniboone and hepmass datasets [here](https://zenodo.org/record/1161203#.Wmtf_XVl8eN).
 We follow the preprocessing (where sensible) from [Masked Autoregressive Flow for Density Estimation](https://github.com/gpapamak/maf).
-Unpack the files into a reasonable location (the default expected location for the files are ~/datasets/UCI/hepmass/ and ~/datasets/UCI/miniboone/)
+Unpack the files into a reasonable location (the default expected location for the files are ~/datasets/UCI/hepmass/ and ~/datasets/UCI/miniboone/).
 
 ### NLP Data Preparation
 
