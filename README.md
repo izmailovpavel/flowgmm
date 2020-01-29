@@ -27,8 +27,8 @@ We provide the scripts and example commands to reproduce the experiments from th
 
 ## Synthetic Datasets
 
-The experiments on synthetic data are implemented in [this ipython notebook](https://github.com/izmailovpavel/flow_ssl/blob/public/experiments/synthetic_data/synthetic.ipynb).
-We additionaly provide [another ipython notebook](https://github.com/izmailovpavel/flow_ssl/blob/public/experiments/synthetic_data/synthetic-labeled-only.ipynb)
+The experiments on synthetic data are implemented in [this ipython notebook](https://github.com/izmailovpavel/flowgmm/blob/public/experiments/synthetic_data/synthetic.ipynb).
+We additionaly provide [another ipython notebook](https://github.com/izmailovpavel/flowgmm/blob/public/experiments/synthetic_data/synthetic-labeled-only.ipynb)
 applying FlowGMM to labeled data only. 
 
 ## Image Classification
@@ -103,15 +103,15 @@ Unpack the files into a reasonable location (the default expected location for t
 ### NLP Data Preparation
 
 To run experiments on the text data, you first need to download the data and compute the BERT embeddings. To get the data run `data/nlp_datasets/get_text_classification_data.sh`. 
-Then, you [this ipython notebook](https://github.com/izmailovpavel/flow_ssl/blob/public/data/nlp_datasets/text_preprocessing/AGNewsPreprocessing.ipynb) shows an example of computing BERT embeddings for the data.
+Then, you [this ipython notebook](https://github.com/izmailovpavel/flowgmm/blob/public/data/nlp_datasets/text_preprocessing/AGNewsPreprocessing.ipynb) shows an example of computing BERT embeddings for the data.
 
 ### Running the Models
 
-After the data has been prepared, the notebook [here](https://github.com/izmailovpavel/flow_ssl/blob/public/experiments/baselines/graphssl.ipynb) can be used to run the kNN, Logistic Regression, and Label Spreading baselines.
+After the data has been prepared, the notebook [here](https://github.com/izmailovpavel/flowgmm/blob/public/experiments/baselines/graphssl.ipynb) can be used to run the kNN, Logistic Regression, and Label Spreading baselines.
 
-The 3-Layer NN with dropout and Pi-Model baseline experiments are implemented in [train_semisup_text_baselines.py](https://github.com/izmailovpavel/flow_ssl/blob/public/experiments/train_flows/train_semisup_text_baselines.py).
+The 3-Layer NN with dropout and Pi-Model baseline experiments are implemented in [train_semisup_text_baselines.py](https://github.com/izmailovpavel/flowgmm/blob/public/experiments/train_flows/train_semisup_text_baselines.py).
 
-Finally the FlowGMM method can be trained on these datasets using [train_semisup_flowgmm_tabular.py](https://github.com/izmailovpavel/flow_ssl/blob/public/experiments/train_flows/train_semisup_flowgmm_tabular.py).
+Finally the FlowGMM method can be trained on these datasets using [train_semisup_flowgmm_tabular.py](https://github.com/izmailovpavel/flowgmm/blob/public/experiments/train_flows/train_semisup_flowgmm_tabular.py).
 
 
 # References
