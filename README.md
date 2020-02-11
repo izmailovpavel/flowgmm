@@ -15,6 +15,15 @@ We show promising results on a wide range of semi-supervised classification prob
 
 ![Screenshot from 2019-12-29 19-32-26](https://user-images.githubusercontent.com/14368801/71559657-fa771280-2a71-11ea-8deb-5b3b422c6c8f.png)
 
+Please cite our work if you find it useful:
+```bibtex
+@article{izmailov2019semi,
+  title={Semi-Supervised Learning with Normalizing Flows},
+  author={Izmailov, Pavel and Kirichenko, Polina and Finzi, Marc and Wilson, Andrew Gordon},
+  journal={arXiv preprint arXiv:1912.13025},
+  year={2019}
+}
+```
 
 # Dependencies
 * [PyTorch](http://pytorch.org/) version 1.0.1
