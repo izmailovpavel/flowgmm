@@ -116,7 +116,7 @@ python3 experiments/train_flows/flowgmm_tabular_new.py --trainer_config "{'unlab
 
 To train FlowGMM on HEPMASS run
 ```bash
-python flowgmm_tabular_new.py --trainer_config "{'unlab_weight':10}"\
+python experiments/train_flows/flowgmm_tabular_new.py --trainer_config "{'unlab_weight':10}"\
  --net_config "{'k':256,'coupling_layers':10,'nperlayer':1}" \
  --network RealNVPTabularWPrior --trainer SemiFlow --num_epochs 15 --dataset HEPMASS
 ```
