@@ -10,7 +10,6 @@ import flow_ssl
 import utils
 from flow_ssl import FlowLoss
 from flow_ssl.realnvp import RealNVPTabular
-from flow_ssl.iresnet import TabularResidualFlow
 from flow_ssl.distributions import SSLGaussMixture
 from scipy.spatial.distance import cdist
 

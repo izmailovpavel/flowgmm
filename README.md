@@ -101,22 +101,51 @@ python3 experiments/train_flows/train_semisup_cons.py --dataset=CIFAR10 --data_p
 ## Tabular Data: UCI and NLP
 
 For class balanced data splitting and for training of FlowGMM on the UCI and NLP datasets, we use the
-[snake-oil-ml](https://github.com/mfinzi/snake-oil-ml/) library.
+[olive-oil-ml](https://github.com/mfinzi/olive-oil-ml/) library. Which you can install with `pip install git+https://github.com/mfinzi/olive-oil-ml`.
+After it has installed you can 
 
-### UCI Data Preparation
+### UCI Experiments
 
-Downdload the miniboone and hepmass datasets [here](https://zenodo.org/record/1161203#.Wmtf_XVl8eN).
+To train FlowGMM on MINIBOONE run
+
+```bash
+python3 experiments/train_flows/flowgmm_tabular_new.py --trainer_config "{'unlab_weight':3.}"\
+ --net_config "{'k':256,'coupling_layers':10,'nperlayer':1}" --network RealNVPTabularWPrior \
+ --trainer SemiFlow --num_epochs 300 --dataset MINIBOONE --lr 3e-4
+```
+
+To train FlowGMM on HEPMASS run
+```bash
+python flowgmm_tabular_new.py --trainer_config "{'unlab_weight':10}"\
+ --net_config "{'k':256,'coupling_layers':10,'nperlayer':1}" \
+ --network RealNVPTabularWPrior --trainer SemiFlow --num_epochs 15 --dataset HEPMASS
+```
+
+Note that for on the low dimensional tabular data the FlowGMM models are quite sensitive to initialization. You may want to run the script a couple of times in case the model does not recover from a bad init.
+
+For the 3 layer NN + Dropout baseline on MINIBOONE run
+```bash
+python experiments/train_flows/flowgmm_tabular_new.py --lr 1e-4 --dataset MINIBOONE --num_epochs 500
+```
+
+For the 3 layer NN + Dropout baseline on HEPMASS run
+```bash
+python experiments/train_flows/flowgmm_tabular_new.py --lr 1e-4 --dataset HEPMASS --num_epochs 500
+```
+
+The training script for the UCI dataset will automatically download the relevant MINIBOONE or HEPMASS datasets and unpack them into ~/datasets/UCI/., but for reference they come from [here](http://archive.ics.uci.edu/ml/datasets/MiniBooNE+particle+identification) and [here](http://archive.ics.uci.edu/ml/datasets/HEPMASS).
 We follow the preprocessing (where sensible) from [Masked Autoregressive Flow for Density Estimation](https://github.com/gpapamak/maf).
-Unpack the files into a reasonable location (the default expected location for the files are ~/datasets/UCI/hepmass/ and ~/datasets/UCI/miniboone/).
+
+The notebook [here](https://github.com/izmailovpavel/flowgmm/blob/public/experiments/baselines/graphssl.ipynb) can be used to run the kNN, Logistic Regression, and Label Spreading baselines once the data has already been downloaded by the previous scripts or if it was downloaded manually.
 
 ### NLP Data Preparation
 
 To run experiments on the text data, you first need to download the data and compute the BERT embeddings. To get the data run `data/nlp_datasets/get_text_classification_data.sh`. 
 Then, you [this ipython notebook](https://github.com/izmailovpavel/flowgmm/blob/public/data/nlp_datasets/text_preprocessing/AGNewsPreprocessing.ipynb) shows an example of computing BERT embeddings for the data.
 
-### Running the Models
+### Running the Models on Text Data
 
-After the data has been prepared, the notebook [here](https://github.com/izmailovpavel/flowgmm/blob/public/experiments/baselines/graphssl.ipynb) can be used to run the kNN, Logistic Regression, and Label Spreading baselines.
+After the data has been prepared, 
 
 The 3-Layer NN with dropout and Pi-Model baseline experiments are implemented in [train_semisup_text_baselines.py](https://github.com/izmailovpavel/flowgmm/blob/public/experiments/train_flows/train_semisup_text_baselines.py).
 

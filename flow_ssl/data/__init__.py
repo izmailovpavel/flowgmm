@@ -12,3 +12,4 @@ from .nlp_datasets import AG_News,YAHOO
 from .gas import GAS
 from .miniboone import MINIBOONE
 from .hepmass import HEPMASS
+__all__ = ['MINIBOONE','HEPMASS','AG_News','YAHOO']
