@@ -29,6 +29,9 @@ class MaskChannelwise:
             return torch.cat((x_id, x_change), dim=1)
         else:
             return torch.cat((x_change, x_id), dim=1)
+        
+    def mask_st_output(self, s, t):
+        return s, t
 
 
 class MaskCheckerboard:
@@ -37,7 +40,6 @@ class MaskCheckerboard:
         self.reverse_mask = reverse_mask
 
     def mask(self, x):
-        #PAVEL: should we pass x sizes to __init__ and only create mask once?
         self.b = checkerboard_mask(x.size(2), x.size(3), self.reverse_mask, device=x.device)
         x_id = x * self.b
         x_change = x * (1 - self.b)
@@ -45,6 +47,9 @@ class MaskCheckerboard:
 
     def unmask(self, x_id, x_change):
         return x_id * self.b + x_change * (1 - self.b)
+    
+    def mask_st_output(self, s, t):
+        return s * (1 - self.b), t * (1 - self.b)
 
 
 class MaskTabular:
@@ -67,7 +72,10 @@ class MaskTabular:
 
     def unmask(self, x_id, x_change):
         return x_id * self.b + x_change * (1 - self.b)
-
+    
+    def mask_st_output(self, s, t):
+        return s * (1 - self.b), t * (1 - self.b)
+    
 
 class CouplingLayerBase(nn.Module):
     """Coupling layer base class in RealNVP.
@@ -84,6 +92,7 @@ class CouplingLayerBase(nn.Module):
 
     def forward(self, x, sldj=None, reverse=True):
         s, t, x_id, x_change = self._get_st(x)
+        s, t = self.mask.mask_st_output(s, t)
         exp_s = s.exp()
         if torch.isnan(exp_s).any():
             raise RuntimeError('Scale factor has NaN entries')
@@ -94,10 +103,13 @@ class CouplingLayerBase(nn.Module):
 
     def inverse(self, y):
         s, t, x_id, x_change = self._get_st(y)
+        s, t = self.mask.mask_st_output(s, t)
+        exp_s = s.exp()
         inv_exp_s = s.mul(-1).exp()
         if torch.isnan(inv_exp_s).any():
             raise RuntimeError('Scale factor has NaN entries')
         x_change = x_change * inv_exp_s - t
+#         self._logdet = -s.view(s.size(0), -1).sum(-1)
         x = self.mask.unmask(x_id, x_change)
         return x
 
@@ -115,7 +127,7 @@ class CouplingLayer(CouplingLayerBase):
         mask (MaskChannelWise or MaskChannelWise): mask.
     """
 
-    def __init__(self, in_channels, mid_channels, num_blocks, mask):
+    def __init__(self, in_channels, mid_channels, num_blocks, mask, init_zeros=False):
         super(CouplingLayer, self).__init__()
 
         self.mask = mask
@@ -127,7 +139,8 @@ class CouplingLayer(CouplingLayerBase):
         # Pavel: reuse Marc's ResNet block?
         self.st_net = ResNet(in_channels, mid_channels, 2 * in_channels,
                              num_blocks=num_blocks, kernel_size=3, padding=1,
-                             double_after_norm=(self.mask.type == MaskType.CHECKERBOARD))
+                             double_after_norm=(self.mask.type == MaskType.CHECKERBOARD),
+                             init_zeros=init_zeros)
 
         # Learnable scale for s
         self.rescale = nn.utils.weight_norm(Rescale(in_channels))
@@ -151,16 +164,25 @@ class Rescale(nn.Module):
 
 class CouplingLayerTabular(CouplingLayerBase):
 
-    def __init__(self, in_dim, mid_dim, num_layers, mask):
-        
+    def __init__(self, in_dim, mid_dim, num_layers, mask, init_zeros=False,dropout=False):
+
         super(CouplingLayerTabular, self).__init__()
         self.mask = mask
-        self.st_net = nn.Sequential(nn.Linear(in_dim, mid_dim),
-                                 nn.ReLU(),
-                                 *self._inner_seq(num_layers, mid_dim),
-                                 nn.Linear(mid_dim, in_dim*2))
+        self.layers = [
+            nn.Linear(in_dim, mid_dim),
+            nn.ReLU(),
+            nn.Dropout(.5) if dropout else nn.Sequential(),
+            *self._inner_seq(num_layers, mid_dim),
+        ]
+        last_layer = nn.Linear(mid_dim, in_dim*2)
+        if init_zeros:
+            nn.init.zeros_(last_layer.weight)
+            nn.init.zeros_(last_layer.bias)
+        self.layers.append(last_layer)
+
+        self.st_net = nn.Sequential(*self.layers)
         self.rescale = nn.utils.weight_norm(RescaleTabular(in_dim))
-                                 
+       
     @staticmethod
     def _inner_seq(num_layers, mid_dim):
         res = []

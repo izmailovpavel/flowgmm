@@ -204,11 +204,12 @@ class RealNVPMNIST(RealNVPBase):
 class RealNVPTabular(RealNVPBase):
 
     def __init__(self, in_dim=2, num_coupling_layers=6, hidden_dim=256, 
-                 num_layers=2):
+                 num_layers=2, init_zeros=False,dropout=False):
 
         super(RealNVPTabular, self).__init__()
         
         self.body = iSequential(*[
-                        CouplingLayerTabular(in_dim, hidden_dim, num_layers, MaskTabular(reverse_mask=bool(i%2)))
+                        CouplingLayerTabular(in_dim, hidden_dim, num_layers, MaskTabular(reverse_mask=bool(i%2)),
+                            init_zeros=init_zeros,dropout=dropout)
                         for i in range(num_coupling_layers)
                     ])

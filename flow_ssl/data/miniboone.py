@@ -7,18 +7,26 @@ import pandas as pd
 from torch.utils.data import Dataset
 from collections import Counter
 from sklearn.model_selection import train_test_split
+from oil.utils.utils import Expression,export,Named
 import pickle
+import subprocess
 
-class MINIBOONE(Dataset):
+class MINIBOONE(Dataset,metaclass=Named):
     num_classes = 2
     class_weights=None
     ignored_index=-100
-    def __init__(self,root=os.path.expanduser('~/datasets/UCI/miniboone/'),train=True, remake=False):
+    stratify=True
+    def __init__(self,root='~/datasets/UCI/miniboone/',train=True, remake=False):
         super().__init__()
+        root = os.path.expanduser(root)
         if os.path.exists(root+'dataset.pickle') and not remake:
             with open(root+'dataset.pickle','rb') as f:
                 self.__dict__ = pickle.load(f).__dict__
         else:
+            if not os.path.exists(root+'MiniBooNE_PID.txt'):
+                os.makedirs(root,exist_ok=True)
+                subprocess.call("wget http://archive.ics.uci.edu/ml/machine-learning-databases/00199/MiniBooNE_PID.txt",shell=True)
+                subprocess.call(f'cp MiniBooNE_PID.txt {root}',shell=True)
             X,Y = load_data_normalised(root+'MiniBooNE_PID.txt')
             self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(X, Y, test_size=.1,stratify=Y)
             with open(root+'dataset.pickle','wb') as f:

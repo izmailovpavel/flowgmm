@@ -8,8 +8,11 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 import pickle
+from oil.utils.utils import Expression,export,Named
+import subprocess
+from sklearn.model_selection import train_test_split
 
-class HEPMASS(Dataset):
+class HEPMASS(Dataset,metaclass=Named):
     """
     The HEPMASS data set.
     http://archive.ics.uci.edu/ml/datasets/HEPMASS
@@ -17,19 +20,30 @@ class HEPMASS(Dataset):
     num_classes = 2
     class_weights=None
     ignored_index=-100
-    def __init__(self,root=os.path.expanduser('~/datasets/UCI/hepmass/'),train=True,remake=False):
+    stratify=True
+    def __init__(self,root='~/datasets/UCI/hepmass/',train=True,remake=False):
         super().__init__()
+        root = os.path.expanduser(root)
         if os.path.exists(root+'dataset.pickle') and not remake:
             with open(root+'dataset.pickle','rb') as f:
                 self.__dict__ = pickle.load(f).__dict__
         else:
+            if not os.path.exists(root+'1000_train.csv'):
+                os.makedirs(root,exist_ok=True)
+                subprocess.call("wget http://archive.ics.uci.edu/ml/machine-learning-databases/00347/1000_train.csv.gz",shell=True)
+                subprocess.call("wget http://archive.ics.uci.edu/ml/machine-learning-databases/00347/1000_test.csv.gz",shell=True)
+                subprocess.call('gzip -d 1000_train.csv.gz',shell=True)
+                subprocess.call('gzip -d 1000_test.csv.gz',shell=True)
+                subprocess.call(f'cp 1000_train.csv {root}',shell=True)
+                subprocess.call(f'cp 1000_test.csv {root}',shell=True)
             self.trn, self.tst, self.y_trn, self.y_tst = load_data_no_discrete_normalised_as_array(root)
+            #self.trn, _, self.y_trn, _ = train_test_split(self.trn, self.y_trn, train_size=140000,stratify=self.y_trn)
             with open(root+'dataset.pickle','wb') as f:
                 pickle.dump(self,f)
         self.X = torch.from_numpy(self.trn if train else self.tst).float()
         self.y = torch.from_numpy(self.y_trn if train else self.y_tst).long()
         self.dim = self.X.shape[1]
-
+        print(len(self))
     def __len__(self):
         return self.X.shape[0]
     def __getitem__(self,idx):

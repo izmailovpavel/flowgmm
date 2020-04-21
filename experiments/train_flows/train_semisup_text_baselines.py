@@ -27,6 +27,7 @@ from torch.nn.utils import weight_norm
 from oil.utils.utils import Expression,export,Named
 from collections import defaultdict
 
+@export
 class SmallNN(nn.Module,metaclass=Named):
     """
     Very small CNN
@@ -74,7 +75,7 @@ class SmallNN(nn.Module,metaclass=Named):
 #     return cfg['trainer'](model,dataloaders,opt_constr,lr_sched,**cfg['trainer_config'])
 
 
-def makeTabularTrainer(config):
+def makeTabularTrainer(**config):
     cfg = {'dataset':HEPMASS,'network':SmallNN,'net_config': {},
         'loader_config': {'amnt_labeled':20+5000,'amnt_dev':5000,'lab_BS':20},
         'opt_config': {'lr':1e-4},#{'lr':.1, 'momentum':.9, 'weight_decay':1e-4, 'nesterov':True},
