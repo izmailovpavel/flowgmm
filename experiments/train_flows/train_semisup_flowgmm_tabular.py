@@ -19,18 +19,23 @@ def RealNVPTabularWPrior(num_classes,dim_in,coupling_layers,k,means_r=.8,cov_std
     device = torch.device('cuda')
     inv_cov_std = torch.ones((num_classes,), device=device) / cov_std
     model = RealNVPTabular(num_coupling_layers=coupling_layers,in_dim=dim_in,hidden_dim=k,num_layers=1,dropout=True)#*np.sqrt(1000/dim_in)/3
-    dist_scaling = np.sqrt(-8*np.log(1-acc))#np.sqrt(4*np.log(20)/dim_in)#np.sqrt(1000/dim_in)
-    means = utils.get_means('random',r=means_r,num_means=num_classes, trainloader=None,shape=(dim_in),device=device)
-    #means = torch.zeros(2,dim_in,device=device)
-    #means[0,1] = 3.75
-    dist = 2*(means[0]**2).sum().sqrt()
-    means[0] *= 7.5/dist
-    means[1] = -means[0]
-    # means[0] /= means[0].norm()
-    # means[0] *= dist_scaling/2
-    # means[1] = - means[0]
-    model.prior = SSLGaussMixture(means, inv_cov_std,device=device)
-    means_np = means.cpu().numpy()
+    #dist_scaling = np.sqrt(-8*np.log(1-acc))#np.sqrt(4*np.log(20)/dim_in)#np.sqrt(1000/dim_in)
+    if num_classes ==2:
+        means = utils.get_means('random',r=means_r,num_means=num_classes, trainloader=None,shape=(dim_in),device=device)
+        #means = torch.zeros(2,dim_in,device=device)
+        #means[0,1] = 3.75
+        dist = 2*(means[0]**2).sum().sqrt()
+        means[0] *= 7.5/dist
+        means[1] = -means[0]
+        # means[0] /= means[0].norm()
+        # means[0] *= dist_scaling/2
+        # means[1] = - means[0]
+        model.prior = SSLGaussMixture(means, inv_cov_std,device=device)
+        means_np = means.cpu().numpy()
+    else:
+        means = utils.get_means('random',r=means_r*.7,num_means=num_classes, trainloader=None,shape=(dim_in),device=device)
+        model.prior = SSLGaussMixture(means, inv_cov_std,device=device)
+        means_np = means.cpu().numpy()
     print("Pairwise dists:", cdist(means_np, means_np))
     return model
 
