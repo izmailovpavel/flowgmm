@@ -25,22 +25,94 @@ Please cite our work if you find it useful:
 }
 ```
 
-# Dependencies
-* [PyTorch](http://pytorch.org/) version 1.0.1
-* [torchvision](https://github.com/pytorch/vision/) version 0.2.1
+# Installation
+To run the scripts you will need to clone the repo and install it locally. You can use the commands below.
+```bash
+git clone https://github.com/izmailovpavel/flowgmm.git
+cd flowgmm
+pip install -e .
+```
+## Dependencies
+We have the following dependencies for FlowGMM that must be installed prior to install to FlowGMM
+* Python 3.7+
+* [PyTorch](http://pytorch.org/) version 1.0.1+
+* [torchvision](https://github.com/pytorch/vision/) version 0.2.1+
 * [tensorboardX](https://github.com/lanpa/tensorboardX)
-
-# Usage
 
 We provide the scripts and example commands to reproduce the experiments from the paper. 
 
-## Synthetic Datasets
+# Synthetic Datasets
 
 The experiments on synthetic data are implemented in [this ipython notebook](https://github.com/izmailovpavel/flowgmm/blob/public/experiments/synthetic_data/synthetic.ipynb).
 We additionaly provide [another ipython notebook](https://github.com/izmailovpavel/flowgmm/blob/public/experiments/synthetic_data/synthetic-labeled-only.ipynb)
 applying FlowGMM to labeled data only. 
 
-## Image Classification
+# Tabular Datasets
+The tabular datasets will be download and preprocessed automatically the first time they are needed. Using the commands below you can reproduce the performance from the table.
+
+|| AGNEWS | YAHOO  | HEPMASS  | MINIBOONE |
+|---------|------|------|------|-------|
+|MLP |   77.5  | 55.7 | 82.2 | 80.4 |
+|Pi Model|   80.2  | 56.3 | 87.9 | 80.8 |
+|FlowGMM |   **82.1**  | **57.9** | **88.5** | **81.9** |
+
+## Text Classification (Updated)
+Train **FlowGMM** on AG-News (200 labeled examples):
+```bash
+python experiments/train_flows/flowgmm_tabular_new.py --trainer_config "{'unlab_weight':.6}" --net_config "{'k':1024,'coupling_layers':7,'nperlayer':1}" --network RealNVPTabularWPrior --trainer SemiFlow --num_epochs 100 --dataset AG_News --lr 3e-4 --train 200
+```
+Train **FlowGMM** on YAHOO Answers (800 labeled examples):
+```bash
+python experiments/train_flows/flowgmm_tabular_new.py --trainer_config "{'unlab_weight':.2}" --net_config "{'k':1024,'coupling_layers':7,'nperlayer':1}" --network RealNVPTabularWPrior --trainer SemiFlow --num_epochs 200 --dataset YAHOO --lr 3e-4 --train 800
+```
+
+## UCI Data
+
+Train **FlowGMM** on MINIBOONE (20 labeled examples):
+
+```bash
+python experiments/train_flows/flowgmm_tabular_new.py --trainer_config "{'unlab_weight':3.}"\
+ --net_config "{'k':256,'coupling_layers':10,'nperlayer':1}" --network RealNVPTabularWPrior \
+ --trainer SemiFlow --num_epochs 300 --dataset MINIBOONE --lr 3e-4
+```
+
+Train **FlowGMM** on HEPMASS (20 labeled examples):
+```bash
+python experiments/train_flows/flowgmm_tabular_new.py --trainer_config "{'unlab_weight':10}"\
+ --net_config "{'k':256,'coupling_layers':10,'nperlayer':1}" \
+ --network RealNVPTabularWPrior --trainer SemiFlow --num_epochs 15 --dataset HEPMASS
+```
+
+Note that for on the low dimensional tabular data the FlowGMM models are quite sensitive to initialization. You may want to run the script a couple of times in case the model does not recover from a bad init.
+
+The training script for the UCI dataset will automatically download the relevant MINIBOONE or HEPMASS datasets and unpack them into ~/datasets/UCI/., but for reference they come from [here](http://archive.ics.uci.edu/ml/datasets/MiniBooNE+particle+identification) and [here](http://archive.ics.uci.edu/ml/datasets/HEPMASS).
+We follow the preprocessing (where sensible) from [Masked Autoregressive Flow for Density Estimation](https://github.com/gpapamak/maf).
+
+## Baselines
+
+Training the **3 Layer NN + Dropout** on
+
+YAHOO Answers: `python experiments/train_flows/flowgmm_tabular_new.py --lr=1e-3 --dataset YAHOO --num_epochs 1000 --train 800`
+
+AG-NEWS: `python experiments/train_flows/flowgmm_tabular_new.py --lr 1e-4 --dataset AG_News --num_epochs 1000 --train 200`
+
+MINIBOONE: `python experiments/train_flows/flowgmm_tabular_new.py --lr 1e-4 --dataset MINIBOONE --num_epochs 500`
+
+HEPMASS: `python experiments/train_flows/flowgmm_tabular_new.py --lr 1e-4 --dataset HEPMASS --num_epochs 500`
+
+Training the **Pi Model** on
+
+YAHOO Answers: `python flowgmm_tabular_new.py --lr=1e-3 --dataset YAHOO --num_epochs 300 --train 800 --trainer PiModel --trainer_config "{'cons_weight':.3}"`
+
+AG-NEWS: `python experiments/train_flows/flowgmm_tabular_new.py --lr 1e-3 --dataset AG_News --num_epochs 100 --train 200 --trainer PiModel --trainer_config "{'cons_weight':30}"`
+
+MINIBOONE: `python flowgmm_tabular_new.py --lr 3e-4 --dataset MINIBOONE --trainer PiModel --trainer_config "{'cons_weight':30}" --num_epochs 10`
+
+HEPMASS: `python experiments/train_flows/flowgmm_tabular_new.py --trainer PiModel --num_epochs 10 --dataset MINIBOONE --trainer_config "{'cons_weight':3}" --lr 1e-4`
+
+The notebook [here](https://github.com/izmailovpavel/flowgmm/blob/public/experiments/baselines/graphssl.ipynb) can be used to run the kNN, Logistic Regression, and Label Spreading baselines once the data has already been downloaded by the previous scripts or if it was downloaded manually.
+
+# Image Classification
 
 To run experiments with FlowGMM on image classification problems you first need to download and prepare the data.
 To do so, run the following scripts:
@@ -98,58 +170,21 @@ python3 experiments/train_flows/train_semisup_cons.py --dataset=CIFAR10 --data_p
   --lr=1e-4 --eval_freq=50
   ```
 
-## Tabular Data: UCI and NLP
 
-For class balanced data splitting and for training of FlowGMM on the UCI and NLP datasets, we use the
-[olive-oil-ml](https://github.com/mfinzi/olive-oil-ml/) library. Which you can install with `pip install git+https://github.com/mfinzi/olive-oil-ml`.
-After it has installed you can 
 
-### UCI Experiments
-
-To train FlowGMM on MINIBOONE run
-
-```bash
-python3 experiments/train_flows/flowgmm_tabular_new.py --trainer_config "{'unlab_weight':3.}"\
- --net_config "{'k':256,'coupling_layers':10,'nperlayer':1}" --network RealNVPTabularWPrior \
- --trainer SemiFlow --num_epochs 300 --dataset MINIBOONE --lr 3e-4
-```
-
-To train FlowGMM on HEPMASS run
-```bash
-python experiments/train_flows/flowgmm_tabular_new.py --trainer_config "{'unlab_weight':10}"\
- --net_config "{'k':256,'coupling_layers':10,'nperlayer':1}" \
- --network RealNVPTabularWPrior --trainer SemiFlow --num_epochs 15 --dataset HEPMASS
-```
-
-Note that for on the low dimensional tabular data the FlowGMM models are quite sensitive to initialization. You may want to run the script a couple of times in case the model does not recover from a bad init.
-
-For the 3 layer NN + Dropout baseline on MINIBOONE run
-```bash
-python experiments/train_flows/flowgmm_tabular_new.py --lr 1e-4 --dataset MINIBOONE --num_epochs 500
-```
-
-For the 3 layer NN + Dropout baseline on HEPMASS run
-```bash
-python experiments/train_flows/flowgmm_tabular_new.py --lr 1e-4 --dataset HEPMASS --num_epochs 500
-```
-
-The training script for the UCI dataset will automatically download the relevant MINIBOONE or HEPMASS datasets and unpack them into ~/datasets/UCI/., but for reference they come from [here](http://archive.ics.uci.edu/ml/datasets/MiniBooNE+particle+identification) and [here](http://archive.ics.uci.edu/ml/datasets/HEPMASS).
-We follow the preprocessing (where sensible) from [Masked Autoregressive Flow for Density Estimation](https://github.com/gpapamak/maf).
-
-The notebook [here](https://github.com/izmailovpavel/flowgmm/blob/public/experiments/baselines/graphssl.ipynb) can be used to run the kNN, Logistic Regression, and Label Spreading baselines once the data has already been downloaded by the previous scripts or if it was downloaded manually.
-
+<!-- 
 ### NLP Data Preparation
 
 To run experiments on the text data, you first need to download the data and compute the BERT embeddings. To get the data run `data/nlp_datasets/get_text_classification_data.sh`. 
-Then, you [this ipython notebook](https://github.com/izmailovpavel/flowgmm/blob/public/data/nlp_datasets/text_preprocessing/AGNewsPreprocessing.ipynb) shows an example of computing BERT embeddings for the data.
+Then, you [this ipython notebook](https://github.com/izmailovpavel/flowgmm/blob/public/data/nlp_datasets/text_preprocessing/AGNewsPreprocessing.ipynb) shows an example of computing BERT embeddings for the data. -->
 
-### Running the Models on Text Data
+<!-- ### Running the Models on Text Data
 
 After the data has been prepared, 
 
 The 3-Layer NN with dropout and Pi-Model baseline experiments are implemented in [train_semisup_text_baselines.py](https://github.com/izmailovpavel/flowgmm/blob/public/experiments/train_flows/train_semisup_text_baselines.py).
 
-Finally the FlowGMM method can be trained on these datasets using [train_semisup_flowgmm_tabular.py](https://github.com/izmailovpavel/flowgmm/blob/public/experiments/train_flows/train_semisup_flowgmm_tabular.py).
+Finally the FlowGMM method can be trained on these datasets using [train_semisup_flowgmm_tabular.py](https://github.com/izmailovpavel/flowgmm/blob/public/experiments/train_flows/train_semisup_flowgmm_tabular.py). -->
 
 
 # References

@@ -2,23 +2,34 @@ import os.path
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+import subprocess
 
+GDRIVE_DOWNLOAD = lambda FID,FNAME: f"wget --load-cookies /tmp/cookies.txt \"https://docs.google.com/uc?export=download&confirm=$(wget\
+        --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate \
+        'https://docs.google.com/uc?export=download&id={FID}' -O- | \
+        sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\\1\\n/p')&id={FID}\" -O {FNAME} && rm -rf /tmp/cookies.txt"
 
 class AG_News(Dataset):
     num_classes=4
     class_weights=None
     ignored_index=-100
     dim = 768
-    def __init__(self, root=os.path.expanduser('~/datasets/AGNEWS/'), train=True, transform=None, target_transform=None, 
-                 download=False):
-        if download:
-            raise ValueError("Please run the data preparation scripts and set `download=False`")
+    train_fid,train_fname = '1k40hM-x91OPUwGXhWVU7NoCUOXXEuFR4','ag_news_train.npz'
+    test_fid,test_fname = '1cPzyv6UW6Cau87fDj3hxe523UL4qw4EJ','ag_news_test.npz'
+    def __init__(self, root=os.path.expanduser('~/datasets/AGNEWS/'), train=True, transform=None, target_transform=None):
+        if not os.path.exists(root+self.train_fname):
+            os.makedirs(root,exist_ok=True)
+            subprocess.call(GDRIVE_DOWNLOAD(self.train_fid,self.train_fname),shell=True)
+            subprocess.call(GDRIVE_DOWNLOAD(self.test_fid,self.test_fname),shell=True)
+            subprocess.call(f'cp {self.train_fname} {root}',shell=True)
+            subprocess.call(f'cp {self.test_fname} {root}',shell=True)
+
         if transform is not None:
             raise ValueError("Transform should be `None`")
         if train:
-            path = os.path.join(root, "ag_news_train.npz") 
+            path = os.path.join(root, self.train_fname) 
         else:
-            path = os.path.join(root, "ag_news_test.npz") 
+            path = os.path.join(root, self.test_fname) 
 
         data_labels = np.load(path)
         data, labels = data_labels["encodings"], data_labels["labels"]
@@ -51,10 +62,18 @@ class YAHOO(Dataset):
     class_weights=None
     ignored_index=-100
     dim = 768
+    train_fid,train_fname = '1nkf9k3Cqfxxpk05c0yN0HVVtijrVWjde','yahoo_train.npz'
+    test_fid,test_fname = '1Z20AEPvX_mVle_1SFCyrWYBiglmZ6_wv','yahoo_test.npz'
     def __init__(self, root=os.path.expanduser('~/datasets/YAHOO/'), train=True):
         super().__init__()
-        train_path = os.path.join(root, "yahoo_train.npz") 
-        test_path = os.path.join(root, "yahoo_test.npz")
+        if not os.path.exists(root+self.train_fname):
+            os.makedirs(root,exist_ok=True)
+            subprocess.call(GDRIVE_DOWNLOAD(self.train_fid,self.train_fname),shell=True)
+            subprocess.call(GDRIVE_DOWNLOAD(self.test_fid,self.test_fname),shell=True)
+            subprocess.call(f'cp {self.train_fname} {root}',shell=True)
+            subprocess.call(f'cp {self.test_fname} {root}',shell=True)
+        train_path = os.path.join(root, self.train_fname) 
+        test_path = os.path.join(root, self.test_fname)
         train_data = np.load(train_path)
         test_data = np.load(test_path)
         self.X_train, self.y_train = train_data["encodings"], train_data["labels"]
