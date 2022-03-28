@@ -38,7 +38,7 @@ class SSLGaussMixture(torch.distributions.Distribution):
             all_samples = [g.sample(sample_shape) for g in self.gaussians]
             samples = all_samples[0]
             for i in range(self.n_components):
-                mask = np.where(idx == i)
+                mask = np.where(idx == i)[0]
                 samples[mask] = all_samples[i][mask]
         return samples
         
