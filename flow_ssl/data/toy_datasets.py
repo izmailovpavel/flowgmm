@@ -61,6 +61,6 @@ def make_dataset_from_img(img_path):
 def make_dataset_from_npz(npz_path):
     f = np.load(npz_path)
     data = f["data"].astype(np.float32)
-    labels = f["labels"].astype(np.int)
+    labels = f["labels"].astype(int)
     return data, labels
  
